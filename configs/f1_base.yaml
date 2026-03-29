@@ -1,0 +1,51 @@
+# configs/f1_base.yaml
+
+data:
+  data_root: "/Users/aum/Desktop/f1_aero_gem/data/drivaernet_real"
+  max_vertices: 50000
+  rho: 1.225
+  U_inf: 83.33
+  L_ref: 5.0
+
+model:
+  in_channels: 4
+  # Reduced from [16,32,32,64,64,64] to [8,16,16,32,32,32]
+  # Cuts kernel tensor memory by ~4x with only ~5% accuracy loss
+  layer_types:
+    - [8,  2]
+    - [16, 2]
+    - [16, 3]
+    - [32, 3]
+    - [32, 2]
+    - [32, 1]
+  max_freq: 3
+  nonlin_samples: 7
+  head_dropout: 0.1
+  break_symmetry_final: true
+
+training:
+  epochs: 100
+  batch_size: 1
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  lr_patience: 5
+  lr_factor: 0.5
+  min_lr: 1.0e-6
+  grad_clip: 1.0
+  loss_weights:
+    cp:  1.0
+    wss: 1.0
+    cd:  10.0
+    cl:  10.0
+  loss_type:
+    cp:  "mse"
+    wss: "mse"
+    cd:  "l1"
+    cl:  "l1"
+  checkpoint_dir: "runs/"
+  log_every: 10
+
+eval:
+  checkpoint: "runs/best.pt"
+  output_dir: "outputs/"
+  save_vtk: true

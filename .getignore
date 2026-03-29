@@ -1,0 +1,19 @@
+./Miniconda3-latest-MacOSX-arm64.sh
+./.git/objects/1f/80a659f1173d0795be5a372ce6c8c794dc98d8
+
+# Ignore Mac system files
+.DS_Store
+
+# Ignore Python virtual environments
+venv/
+env/
+f1_gdl_env/
+__pycache__/
+
+# Ignore massive F2 data files and zips
+*.zip
+*.vtp
+*.vtk
+*.stl
+/DrivAerNet++/
+/Volumes/
