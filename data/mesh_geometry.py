@@ -241,34 +241,39 @@ def precompute_geometry(
     # 1. Vertex normals
     normals = compute_vertex_normals(vertices, faces)   # (V, 3)
 
-    # 2. Log map for every directed edge
-    log_pq = log_map(
+    # 2. Log map for every undirected edge  (i < j)
+    # log_ij is the tangent vector at j pointing toward i
+    log_ij = log_map(
         p=vertices[tgt],
         q=vertices[src],
         normal_p=normals[tgt],
-    )   # (E, 3)  tangent vectors at tgt pointing toward src
+    )   # (E, 3)
 
-    # 3. Choose reference neighbour per vertex (vectorised — no Python loop).
-    #    For each target vertex p, pick the log_pq of the edge with the
-    #    smallest edge index pointing to it.  Arbitrary but consistent gauge.
+    # 3. Choose reference neighbour per vertex.
+    #    Since edge_index is only (i < j), we expand to directed for gauge selection
+    #    to ensure every vertex has at least one neighbour in its ref list.
+    full_edge_index = torch.cat([edge_index, edge_index.flip(0)], dim=1)
+    full_log        = torch.cat([log_ij, -log_ij], dim=0) # crude approx for ref choice
+    f_src, f_tgt    = full_edge_index[0], full_edge_index[1]
+
     V = vertices.shape[0]
-    edge_ids = torch.arange(tgt.shape[0], dtype=torch.long, device=device)
-    ref_edge = torch.full((V,), tgt.shape[0], dtype=torch.long, device=device)
-    for i in range(tgt.shape[0] - 1, -1, -1):   # reverse so smallest wins
-        ref_edge[tgt[i]] = i
-    ref_log = log_pq[ref_edge]   # (V, 3)
+    edge_ids = torch.arange(f_tgt.shape[0], dtype=torch.long, device=device)
+    ref_edge = torch.full((V,), f_tgt.shape[0], dtype=torch.long, device=device)
+    for i in range(f_tgt.shape[0] - 1, -1, -1):
+        ref_edge[f_tgt[i]] = i
+    ref_log = full_log[ref_edge]   # (V, 3)
 
     # 4. Build reference frames at every vertex
     e1, e2 = build_reference_frames(normals, ref_log)   # (V, 3), (V, 3)
 
-    # 5. Neighbour angles θ_pq
+    # 5. Neighbour angles θ_ij  (angle of i in j's frame)
     angles = compute_neighbour_angles(
-        log_pq=log_pq,
+        log_pq=log_ij,
         e1_p=e1[tgt],
         e2_p=e2[tgt],
     )   # (E,)
 
-    # 6. Parallel transporters g_{q→p}
+    # 6. Parallel transporters g_{i→j}
     transporters = compute_parallel_transporters(
         e1_src=e1[src],
         e2_src=e2[src],
@@ -321,10 +326,13 @@ def build_edge_index_from_faces(faces: Tensor) -> Tensor:
     # ────────────────────────────────────────────────────────────────
 
     pairs = []
-    for i, j in [(0,1),(1,0),(0,2),(2,0),(1,2),(2,1)]:
-        pairs.append(torch.stack([faces[:,i], faces[:,j]], dim=0))
+    for i, j in [(0,1), (0,2), (1,2)]:
+        # Sort indices to ensure each physical edge is represented once (i < j)
+        e = torch.stack([faces[:, i], faces[:, j]], dim=0)
+        e = torch.sort(e, dim=0)[0]
+        pairs.append(e)
     edge_index = torch.cat(pairs, dim=1)
 
-    # Final deduplication of any remaining duplicate directed edges
+    # Final deduplication of unique undirected edges
     edge_index = torch.unique(edge_index, dim=1)
     return edge_index

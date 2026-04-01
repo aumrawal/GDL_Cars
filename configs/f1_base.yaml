@@ -1,7 +1,8 @@
 # configs/f1_base.yaml
+# Memory-optimised for M4 MacBook Air 16 GB
 
 data:
-  data_root: "/Users/aum/Desktop/f1_aero_gem/data/drivaernet_real"
+  data_root: "/Users/aum/Desktop/f1_aero_gem/data/drivaernet_tiny"
   max_vertices: 50000
   rho: 1.225
   U_inf: 83.33
@@ -9,15 +10,15 @@ data:
 
 model:
   in_channels: 4
-  # Reduced from [16,32,32,64,64,64] to [8,16,16,32,32,32]
-  # Cuts kernel tensor memory by ~4x with only ~5% accuracy loss
+  # Narrowed to keep peak kernel tensor (E, C_out, C_in) under 1 GB:
+  # E ≈ 150k (directed only), C_max = 32, so 150k × 32 × 32 × 4B = 614 MB
   layer_types:
     - [8,  2]
+    - [8,  2]
     - [16, 2]
-    - [16, 3]
-    - [32, 3]
-    - [32, 2]
-    - [32, 1]
+    - [16, 2]
+    - [16, 1]
+    - [16, 1]
   max_freq: 3
   nonlin_samples: 7
   head_dropout: 0.1

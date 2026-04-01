@@ -22,7 +22,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
-from torch_scatter import scatter_add
+def scatter_add(src, index, dim, dim_size):
+    """Pure PyTorch replacement for torch_scatter.scatter_add."""
+    out = torch.zeros(dim_size, src.shape[-1], dtype=src.dtype, device=src.device)
+    index_expanded = index.unsqueeze(-1).expand_as(src)
+    out.scatter_add_(0, index_expanded, src)
+    return out
 
 from models.irreps import (
     FeatureType,
@@ -307,7 +312,19 @@ class GEMBlock(nn.Module):
         angles:       Tensor,   # (E,)
         transporters: Tensor,   # (E,)
     ) -> Tensor:
-        h = self.conv(x, edge_index, angles, transporters)  # (V, C_out)
-        h = self.norm(h)
-        h = self.nonlin(h)
-        return h + self.skip(x)   # (V, C_out)
+        # Gradient checkpointing: recompute activations during backward
+        # instead of storing them — halves activation memory at ~30% speed cost.
+        if self.training:
+            from torch.utils.checkpoint import checkpoint
+            def _fwd(x, ei, ang, tr):
+                h = self.conv(x, ei, ang, tr)
+                h = self.norm(h)
+                h = self.nonlin(h)
+                return h
+            h = checkpoint(_fwd, x, edge_index, angles, transporters,
+                           use_reentrant=False)
+        else:
+            h = self.conv(x, edge_index, angles, transporters)
+            h = self.norm(h)
+            h = self.nonlin(h)
+        return h + self.skip(x)

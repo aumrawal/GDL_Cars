@@ -49,15 +49,15 @@ def download_drivaernet_pipeline_data():
         elif 'press' in lower_name or 'cp' in lower_name:
             designs[design_id]['pressure'] = file_info
             
-    # 3. Filter and select exactly 200 designs
+    # 3. Filter and select exactly 300 designs
     # (If DrivAerNet++ provides all fields unified inside a single .vtp file, 
     # it will just map to the 'mesh' key. The script handles both single and separate files).
-    target_design_ids = sorted(list(designs.keys()))[:200]
+    target_design_ids = sorted(list(designs.keys()))[:300]
     print(f"Found and selected {len(target_design_ids)} unique designs.\n")
 
     # 4. Download Process
     for i, d_id in enumerate(target_design_ids):
-        print(f"[{i+1}/200] Processing Design ID: {d_id}")
+        print(f"[{i+1}/300] Processing Design ID: {d_id}")
         
         for file_type, file_info in designs[d_id].items():
             file_id = file_info['id']

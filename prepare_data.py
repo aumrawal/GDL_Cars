@@ -29,7 +29,7 @@ COEFF_CSV  = "/Volumes/DriverNet/drag_coefficients.csv"
 
 OUTPUT_DIR = os.path.expanduser("~/Desktop/f1_aero_gem/data/drivaernet_real")
 
-N_DESIGNS  = 200      # how many designs to extract (out of ~684)
+N_DESIGNS  = 300      # how many designs to extract (out of ~684)
 MAX_VERTS  = 50000    # subsample meshes to this size (None = keep all)
 TRAIN_FRAC = 0.70
 VAL_FRAC   = 0.15

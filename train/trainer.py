@@ -137,7 +137,7 @@ def train_epoch(
     # E ≈ 3V for triangular meshes; at 50k verts E ≈ 150k.
     # kernel tensor (E, C_out, C_in) at 64-ch layers ≈ 150k * 64 * 64 * 4B ≈ 2.4 GB — fine.
     # At 300k verts E ≈ 900k → 14 GB → OOM. Guard at 200k edges.
-    MAX_EDGES = 180_000   # welded mesh at 50k verts gives ~150k edges
+    MAX_EDGES = 200_000   # 50k verts * 3 undirected edges/vert = 150k edges
 
     for i, batch in enumerate(loader):
         # ── OOM guard: skip meshes that are too large ──────────────
