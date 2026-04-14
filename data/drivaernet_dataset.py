@@ -77,9 +77,14 @@ def mesh_to_pyg_data(raw, rho=1.225, U_inf=83.33, design_id="") -> Data:
     x = normalise_mesh(torch.cat([verts_t, U_col], dim=-1))
 
     q_inf = 0.5 * rho * U_inf ** 2
+    P_INF = 0.0
+    # if pressure is not None:
+        # p_ref = float(np.mean(pressure))
+        # cp = torch.from_numpy((pressure - p_ref) / q_inf).float()
+          # freestream static pressure — 0 Pa in DrivAerNet (gauge pressure)
+
     if pressure is not None:
-        p_ref = float(np.mean(pressure))
-        cp = torch.from_numpy((pressure - p_ref) / q_inf).float()
+        cp = torch.from_numpy((pressure - P_INF) / q_inf).float()
     else:
         cp = torch.zeros(verts_t.shape[0])
 
