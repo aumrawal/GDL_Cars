@@ -2,7 +2,7 @@
 # Memory-optimised for M4 MacBook Air 16 GB
 
 data:
-  data_root: "/kaggle/working/GDL_Cars/data/drivaernet_tiny"
+  data_root: "/kaggle/working/drivaernet_tiny"
   max_vertices: 50000
   rho: 1.225
   U_inf: 83.33
@@ -47,11 +47,14 @@ model:
 #   log_every: 10
 
 training:
-  epochs: 100
+  epochs: 50
   batch_size: 1
   lr: 3.0e-4          # was 1e-3 — lower LR is critical with 20 samples
-  weight_decay: 1.0e-4
-  lr_patience: 8       # was 5 — give it more time before decay
+  # weight_decay: 1.0e-4
+  # lr_patience: 8       # was 5 — give it more time before decay
+  # lr_factor: 0.5
+  weight_decay: 0.0      # disable regularisation for overfit test
+  lr_patience: 20        # don't decay LR during short test
   lr_factor: 0.5
   min_lr: 1.0e-6
   grad_clip: 1.0
