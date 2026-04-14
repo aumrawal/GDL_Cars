@@ -93,19 +93,19 @@ def mesh_to_pyg_data(raw, rho=1.225, U_inf=83.33, design_id="") -> Data:
     L_ref = 4.6       # car length, metres
 
     if wss is not None:
-    tau_ref  = mu * U_inf / L_ref          # physical reference scale ~3.2e-4 Pa
-    wss_new  = wss / tau_ref               # rescale to order ~100-500
+        tau_ref  = mu * U_inf / L_ref          # physical reference scale ~3.2e-4 Pa
+        wss_new  = wss / tau_ref               # rescale to order ~100-500
 
-    wss_mean = wss_new.mean()              # scalar — mean over all V×3 elements
-    wss_std  = wss_new.std().clip(1e-8)    # scalar std, clip instead of clamp (numpy)
+        wss_mean = wss_new.mean()              # scalar — mean over all V×3 elements
+        wss_std  = wss_new.std().clip(1e-8)    # scalar std, clip instead of clamp (numpy)
 
-    wss_nd   = torch.from_numpy(
-                   ((wss_new - wss_mean) / wss_std).astype(np.float32)
-               )                           # (V, 3), std=1.0
+        wss_nd   = torch.from_numpy(
+                    ((wss_new - wss_mean) / wss_std).astype(np.float32)
+                )                           # (V, 3), std=1.0
     else:
-    wss_nd = torch.zeros(verts_t.shape[0], 3)
-    cd = torch.tensor([raw['cd_total'] or 0.0])
-    cl = torch.tensor([raw['cl_total'] or 0.0])
+        wss_nd = torch.zeros(verts_t.shape[0], 3)
+        cd = torch.tensor([raw['cd_total'] or 0.0])
+        cl = torch.tensor([raw['cl_total'] or 0.0])
 
     edge_index = build_edge_index_from_faces(faces_t)
     geo = precompute_geometry(verts_t, faces_t, edge_index)
