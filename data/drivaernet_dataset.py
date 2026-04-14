@@ -88,9 +88,22 @@ def mesh_to_pyg_data(raw, rho=1.225, U_inf=83.33, design_id="") -> Data:
     else:
         cp = torch.zeros(verts_t.shape[0])
 
-    wss_nd = torch.from_numpy(wss / q_inf).float() if wss is not None \
-             else torch.zeros(verts_t.shape[0], 3)
 
+    mu= 1.81e-5   # dynamic viscosity of air at 20°C, Pa·s
+    L_ref = 4.6       # car length, metres
+
+    if wss is not None:
+    tau_ref  = mu * U_inf / L_ref          # physical reference scale ~3.2e-4 Pa
+    wss_new  = wss / tau_ref               # rescale to order ~100-500
+
+    wss_mean = wss_new.mean()              # scalar — mean over all V×3 elements
+    wss_std  = wss_new.std().clip(1e-8)    # scalar std, clip instead of clamp (numpy)
+
+    wss_nd   = torch.from_numpy(
+                   ((wss_new - wss_mean) / wss_std).astype(np.float32)
+               )                           # (V, 3), std=1.0
+    else:
+    wss_nd = torch.zeros(verts_t.shape[0], 3)
     cd = torch.tensor([raw['cd_total'] or 0.0])
     cl = torch.tensor([raw['cl_total'] or 0.0])
 
@@ -99,7 +112,7 @@ def mesh_to_pyg_data(raw, rho=1.225, U_inf=83.33, design_id="") -> Data:
 
     return Data(x=x, edge_index=edge_index, pos=verts_t, face=faces_t.T,
                 edge_angles=geo['angles'], edge_transporters=geo['transporters'],
-                y_cp=cp, y_wss=wss_nd, y_cd=cd, y_cl=cl,
+                y_cp=cp, y_wss=wss_nd, wss_mean = wss_mean, y_cd=cd, y_cl=cl,
                 design_id=design_id, num_nodes=verts_t.shape[0])
 
 

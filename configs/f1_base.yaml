@@ -6,7 +6,7 @@ data:
   max_vertices: 50000
   rho: 1.225
   U_inf: 83.33
-  L_ref: 5.0
+  L_ref: 4.6
 
 model:
   in_channels: 4
@@ -19,8 +19,8 @@ model:
     - [32, 2]
     - [32, 1]
     - [16, 1]
-  max_freq: 3
-  nonlin_samples: 7
+  max_freq: 2.  # to reduce memory, we limit to ρ₀, ρ₁, ρ₂ (scalar + vector + 2nd order) — no higher frequencies
+  nonlin_samples: 5 # was 7 — reduce for memory, but still enough to capture nonlinearity
   head_dropout: 0.1
   break_symmetry_final: true
 
@@ -56,10 +56,14 @@ training:
   min_lr: 1.0e-6
   grad_clip: 1.0
   loss_weights:
-    cp:  2.0           # was 1.0 — boost per-vertex signal
-    wss: 2.0           # was 1.0 — boost per-vertex signal
-    cd:  1.0           # was 10.0 — massive reduction, stops collapse
-    cl:  1.0           # was 10.0 — same
+    cp:  1.0      # standardised, std=1 → loss≈1.0 when predicting mean
+    wss: 1.0      # standardised, std=1 → loss≈1.0 when predicting mean
+    cd:  0.1      # low variance, L1≈0.01 → 0.1×0.01=0.001 contribution
+    cl:  0.0      # disable entirely — not in this dataset
+    # cp:  2.0           # was 1.0 — boost per-vertex signal
+    # wss: 2.0           # was 1.0 — boost per-vertex signal
+    # cd:  1.0           # was 10.0 — massive reduction, stops collapse
+    # cl:  1.0           # was 10.0 — same
   loss_type:
     cp:  "mse"
     wss: "mse"

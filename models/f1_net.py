@@ -206,7 +206,7 @@ class F1AeroNet(nn.Module):
         self.cp_head  = ScalarHead(head_in, hidden=head_hidden, dropout=head_dropout)
         self.wss_head = VectorHead(head_in, hidden=head_hidden, dropout=head_dropout)
         self.cd_head  = GlobalHead(head_in, hidden=head_hidden // 2, dropout=head_dropout)
-        self.cl_head  = GlobalHead(head_in, hidden=head_hidden // 2, dropout=head_dropout)
+        self.cl_head  = None #no cl in data
 
     @classmethod
     def from_config(cls, cfg: dict) -> 'F1AeroNet':
@@ -255,9 +255,9 @@ class F1AeroNet(nn.Module):
         cp  = self.cp_head(h_heads)              # (V,)
         wss = self.wss_head(h_heads)             # (V, 3)
         cd  = self.cd_head(h_heads, batch)       # (B,)
-        cl  = self.cl_head(h_heads, batch)       # (B,)
+        cl  = None
 
-        return {'cp': cp, 'wss': wss, 'cd': cd, 'cl': cl}
+        return {'cp': cp, 'wss': wss, 'cd': cd, 'cl': None}
 
     def count_parameters(self) -> dict:
         """Count trainable parameters by component."""
