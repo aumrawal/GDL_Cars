@@ -64,7 +64,7 @@ def load_merged_vtp(filepath: str) -> dict:
             'cd_total': cd, 'cl_total': cl}
 
 
-def mesh_to_pyg_data(raw, rho=1.225, U_inf=83.33, design_id="") -> Data:
+# def mesh_to_pyg_data(raw, rho=1.225, U_inf=83.33, design_id="") -> Data:
     vertices = raw['vertices']
     faces    = raw['faces']
     pressure = raw['pressure']
@@ -115,6 +115,75 @@ def mesh_to_pyg_data(raw, rho=1.225, U_inf=83.33, design_id="") -> Data:
                 y_cp=cp, y_wss=wss_nd, wss_mean = wss_mean, y_cd=cd, y_cl=cl,
                 design_id=design_id, num_nodes=verts_t.shape[0])
 
+
+def mesh_to_pyg_data(raw, rho=1.225, U_inf=83.33, design_id="") -> Data:
+    vertices = raw['vertices']
+    faces    = raw['faces']
+    pressure = raw['pressure']
+    wss      = raw['wss']
+
+    verts_t = torch.from_numpy(vertices)
+    faces_t = torch.from_numpy(faces).long()
+
+    U_col = torch.full((verts_t.shape[0], 1), U_inf)
+    x = normalise_mesh(torch.cat([verts_t, U_col], dim=-1))
+
+    # ── Cp ────────────────────────────────────────────────────────────────
+    q_inf = 0.5 * rho * U_inf ** 2
+    P_INF = 0.0
+
+    if pressure is not None:
+        cp_raw  = (pressure - P_INF) / q_inf        # dimensionless
+        cp_mean = cp_raw.mean()
+        cp_std  = cp_raw.std().clip(1e-8)
+        cp_nd   = torch.from_numpy(
+                    ((cp_raw - cp_mean) / cp_std).astype(np.float32)
+                  )
+    else:
+        cp_nd = torch.zeros(verts_t.shape[0])
+
+    # ── WSS ───────────────────────────────────────────────────────────────
+    mu    = 1.81e-5   # dynamic viscosity of air, Pa·s
+    L_ref = 4.6       # car length, metres
+
+    if wss is not None:
+        tau_ref  = mu * U_inf / L_ref
+        wss_new  = wss / tau_ref
+        wss_mean = wss_new.mean()
+        wss_std  = wss_new.std().clip(1e-8)
+        wss_nd   = torch.from_numpy(
+                    ((wss_new - wss_mean) / wss_std).astype(np.float32)
+                   )
+    else:
+        wss_nd   = torch.zeros(verts_t.shape[0], 3)
+        wss_mean = 0.0
+        wss_std  = 1.0
+
+    # ── Cd / Cl ───────────────────────────────────────────────────────────
+    # defined here, outside all if blocks — always assigned
+    cd = torch.tensor([raw['cd_total'] or 0.0], dtype=torch.float32)
+    cl = torch.tensor([raw['cl_total'] or 0.0], dtype=torch.float32)
+
+    # ── Graph geometry ────────────────────────────────────────────────────
+    edge_index = build_edge_index_from_faces(faces_t)
+    geo = precompute_geometry(verts_t, faces_t, edge_index)
+
+    return Data(
+        x                 = x,
+        edge_index        = edge_index,
+        pos               = verts_t,
+        face              = faces_t.T,
+        edge_angles       = geo['angles'],
+        edge_transporters = geo['transporters'],
+        y_cp              = cp_nd,
+        y_wss             = wss_nd,
+        wss_mean          = wss_mean,
+        wss_std           = wss_std,
+        y_cd              = cd,
+        y_cl              = cl,
+        design_id         = design_id,
+        num_nodes         = verts_t.shape[0],
+    )
 
 class DrivAerNetDataset(Dataset):
     def __init__(self, data_root, split='train', rho=1.225, U_inf=83.33,
