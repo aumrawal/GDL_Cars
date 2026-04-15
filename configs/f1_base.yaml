@@ -13,16 +13,37 @@ model:
   # Narrowed to keep peak kernel tensor (E, C_out, C_in) under 1 GB:
   # E ≈ 150k (directed only), C_max = 32, so 150k × 32 × 32 × 4B = 614 MB
   layer_types:
+    - [8,  1]
     - [8,  2]
-    - [16,  2]
-    - [32, 2]
-    - [32, 2]
-    - [32, 1]
-    - [16, 1]
+    - [16, 2]
+    - [16, 2]
+    - [8,  1]
+    - [8,  1]
   max_freq: 2.  # to reduce memory, we limit to ρ₀, ρ₁, ρ₂ (scalar + vector + 2nd order) — no higher frequencies
   nonlin_samples: 5 # was 7 — reduce for memory, but still enough to capture nonlinearity
   head_dropout: 0.1
   break_symmetry_final: true
+
+# Kaggle changes 
+# old = """  layer_types:
+#     - [8,  2]
+#     - [16,  2]
+#     - [32, 2]
+#     - [32, 2]
+#     - [32, 1]
+#     - [16, 1]"""
+
+# new = """  layer_types:
+#     - [4,  1]
+#     - [8,  1]
+#     - [8,  2]
+#     - [8,  2]
+#     - [8,  1]
+#     - [4,  1]"""
+
+
+
+
 
 # training:
 #   epochs: 100
