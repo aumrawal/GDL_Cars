@@ -261,7 +261,7 @@ class F1AeroNet(nn.Module):
 
     def count_parameters(self) -> dict:
         """Count trainable parameters by component."""
-        def count(m): return sum(p.numel() for p in m.parameters() if p.requires_grad)
+        def count(m): return sum(p.numel() for p in m.parameters() if p.requires_grad) if m is not None else 0
         return {
             'input_embed': count(self.input_embed),
             'gem_blocks':  sum(count(b) for b in self.blocks),
