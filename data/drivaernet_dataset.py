@@ -72,8 +72,8 @@ def load_merged_vtp(filepath: str) -> dict:
 
     verts_t = torch.from_numpy(vertices)
     faces_t = torch.from_numpy(faces).long()
-
-    U_col = torch.full((verts_t.shape[0], 1), U_inf)
+    U_ref = 100
+    U_col = torch.full((verts_t.shape[0], 1), U_inf/U_ref)
     x = normalise_mesh(torch.cat([verts_t, U_col], dim=-1))
 
     q_inf = 0.5 * rho * U_inf ** 2
