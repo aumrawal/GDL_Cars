@@ -124,8 +124,8 @@ def mesh_to_pyg_data(raw, rho=1.225, U_inf=83.33, design_id="") -> Data:
 
     verts_t = torch.from_numpy(vertices)
     faces_t = torch.from_numpy(faces).long()
-
-    U_col = torch.full((verts_t.shape[0], 1), U_inf)
+    U_ref = 100.0
+    U_col = torch.full((verts_t.shape[0], 1), U_inf/U_ref)  # normalise U_inf to order 1 for better training stability
     x = normalise_mesh(torch.cat([verts_t, U_col], dim=-1))
 
     # ── Cp ────────────────────────────────────────────────────────────────
