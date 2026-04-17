@@ -13,7 +13,7 @@ model:
   # Narrowed to keep peak kernel tensor (E, C_out, C_in) under 1 GB:
   # E ≈ 150k (directed only), C_max = 32, so 150k × 32 × 32 × 4B = 614 MB
   layer_types:
-    - [8,  1]
+    - [8,  2]
     - [8,  2]
     - [16, 2]
     - [16, 2]
@@ -23,6 +23,50 @@ model:
   nonlin_samples: 5 # was 7 — reduce for memory, but still enough to capture nonlinearity
   head_dropout: 0.1
   break_symmetry_final: true
+
+# configs/f1_base.yaml
+#
+# CHANGE 3: Switch Cp and WSS loss from MSE to Huber
+# ============================================================
+# With symlog-compressed targets, the tails are much tamer, but
+# Huber still helps: it behaves like MSE for small errors (good
+# gradient signal near zero) but switches to linear for large
+# errors (no catastrophic gradients from remaining outliers).
+#
+# delta=1.0 is the natural choice when targets have std=1.0:
+#   - errors < 1σ → MSE (quadratic, strong gradient toward zero)
+#   - errors > 1σ → L1  (linear, stable gradient)
+
+
+training:
+  epochs: 50
+  batch_size: 1
+  lr: 3.0e-4
+  weight_decay: 0.0       # disable regularisation for overfit test
+  lr_patience: 20         # don't decay LR during short test
+  lr_factor: 0.5
+  min_lr: 1.0e-6
+  grad_clip: 1.0
+
+  loss_weights:
+    cp:  1.0
+    wss: 1.0
+    cd:  0.1
+    cl:  0.0               # disabled — not in this dataset
+
+  # ── CHANGED: mse → huber for Cp and WSS ──
+  loss_type:
+    cp:  "huber"           # was "mse" — protects against remaining outliers
+    wss: "huber"           # was "mse" — same reasoning
+    cd:  "l1"              # unchanged
+    cl:  "l1"              # unchanged
+
+eval:
+  checkpoint: "/kaggle/working/GDL_Cars/runs/best.pt"
+  output_dir: "/kaggle/working/GDL_Cars"
+  save_vtk: true
+
+
 
 # Kaggle changes 
 # old = """  layer_types:

@@ -2,23 +2,16 @@
 """
 Loss functions for F1 aerodynamics prediction.
 
-Four prediction targets, each with its own loss:
+CHANGE 3b: Fix Huber delta values
+============================================================
+The existing code had delta=0.1 for scalar_field_loss and delta=0.01
+for vector_field_loss. With targets standardised to std=1.0, these
+are far too small — almost the entire loss surface becomes L1, killing
+the quadratic gradient signal near zero that helps with fine fitting.
 
-    Cp  (scalar field)     — MSE or L1 per vertex
-    WSS (vector field)     — MSE or L1 on vector components per vertex
-    Cd  (scalar global)    — L1 on drag coefficient
-    Cl  (scalar global)    — L1 on lift/downforce coefficient
-
-The total loss is a weighted sum:
-    L = w_cp * L_cp + w_wss * L_wss + w_cd * L_cd + w_cl * L_cl
-
-Cd and Cl get higher weights (default 10×) because they are single scalars
-whose absolute error would otherwise be swamped by per-vertex field losses.
-
-Gradient-weighted surface loss (optional):
-    Aerodynamically critical regions (leading edges, wing tips) have large
-    Cp gradients. We optionally weight the per-vertex Cp loss by the local
-    Cp gradient magnitude so the model focuses on these zones.
+Rule of thumb: set delta ≈ 1.0 when targets have std ≈ 1.0.
+This gives MSE-like behaviour for "normal" errors (<1σ) and
+L1-like protection for outliers (>1σ).
 """
 
 import torch
@@ -48,7 +41,8 @@ def scalar_field_loss(pred: Tensor, target: Tensor, mode: str = 'mse') -> Tensor
     elif mode == 'l1':
         return F.l1_loss(pred, target)
     elif mode == 'huber':
-        return F.huber_loss(pred, target, delta=0.1)
+        # delta=1.0 for std=1 targets: MSE for |error|<1, L1 for |error|>1
+        return F.huber_loss(pred, target, delta=1.0)
     else:
         raise ValueError(f"Unknown loss mode: {mode}")
 
@@ -57,12 +51,12 @@ def vector_field_loss(pred: Tensor, target: Tensor, mode: str = 'mse') -> Tensor
     """
     Loss for per-vertex vector field (WSS).
 
-    Computed on all 3 components jointly — equivalent to mean over component MSEs.
+    Computed on all 3 components jointly.
 
     Args:
         pred   : (V, 3) predicted vectors
         target : (V, 3) ground-truth vectors
-        mode   : 'mse' or 'l1'
+        mode   : 'mse', 'l1', or 'huber'
     Returns:
         scalar loss
     """
@@ -71,7 +65,8 @@ def vector_field_loss(pred: Tensor, target: Tensor, mode: str = 'mse') -> Tensor
     elif mode == 'l1':
         return F.l1_loss(pred, target)
     elif mode == 'huber':
-        return F.huber_loss(pred, target, delta=0.01)
+        # delta=1.0 — same reasoning as scalar field
+        return F.huber_loss(pred, target, delta=1.0)
     else:
         raise ValueError(f"Unknown loss mode: {mode}")
 
@@ -122,7 +117,7 @@ class F1AeroLoss(nn.Module):
             'cp': 1.0, 'wss': 1.0, 'cd': 10.0, 'cl': 10.0
         }
         self.loss_types = loss_types or {
-            'cp': 'mse', 'wss': 'mse', 'cd': 'l1', 'cl': 'l1'
+            'cp': 'huber', 'wss': 'huber', 'cd': 'l1', 'cl': 'l1'
         }
 
     def forward(

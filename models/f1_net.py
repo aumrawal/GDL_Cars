@@ -2,26 +2,23 @@
 """
 F1AeroNet: Full prediction network for F1 car aerodynamics.
 
-Architecture:
-    Input: per-vertex [x, y, z, U_inf] (4 × ρ₀ scalars)
-      │
-      ├─ Input embedding: Linear → (16ρ₀)
-      │
-      ├─ 6× GEMBlock with progressively richer feature types
-      │     [(16,2), (32,2), (32,3), (64,3), (64,2), (64,1)]
-      │     Each block: GEMConv → LayerNorm → RegularNonlinearity → Residual
-      │
-      ├─ Output projection → (64ρ₀)  [collapse all to scalars for heads]
-      │
-      ├─ HEAD A: Cp  — per-vertex scalar → MLP → (V, 1)
-      ├─ HEAD B: WSS — per-vertex vector → linear decode ρ₁ → (V, 3)
-      ├─ HEAD C: Cd  — global mean pool → MLP → (1,)
-      └─ HEAD D: Cl  — global mean pool → MLP → (1,)
+CHANGE 2: Fix head output scale at init
+============================================================
+Problem: Default PyTorch init for a 3-layer ReLU MLP (C → 128 → 64 → 1)
+produces outputs with std ≈ 0.05-0.1 when input std ≈ 1.0.
+But targets have std = 1.0 after normalisation.
 
-The key F1 insight: pressure (Cp) is a ρ₀ feature (gauge-invariant scalar),
-wall shear stress is a ρ₁ feature (tangent vector, gauge-equivariant).
-The network keeps them in their correct geometric types through all layers,
-only collapsing to Euclidean vectors at the output head.
+The network must learn to amplify its weights ~15× before it can even
+START fitting — this traps it in a near-zero prediction regime.
+
+Fix: After building each head's MLP, multiply the last Linear layer's
+weight by a gain factor so that output std ≈ 1.0 at init.
+
+Math:  output_std ≈ input_std × weight_std × √fan_in
+       For Linear(64, 1): default weight_std ≈ 0.125, fan_in = 64
+       → output_std ≈ 1.15 × 0.125 × 8 ≈ 1.15  ... but ReLU halves
+       variance at each layer, so after 2 ReLUs: ÷4 → std ≈ 0.06
+       Fix: multiply last layer weight by 10-15×.
 """
 
 import torch
@@ -47,6 +44,28 @@ def build_ftype(mult: int, max_order: int) -> FeatureType:
 
 
 # ────────────────────────────────────────────────────────────────────────────
+# Head init helper
+# ────────────────────────────────────────────────────────────────────────────
+
+def _boost_last_layer(mlp: nn.Sequential, gain: float = 10.0):
+    """
+    Multiply the last Linear layer's weight by `gain` so that
+    the MLP's output std ≈ target std at init.
+
+    This compensates for variance lost through ReLU layers
+    (each ReLU halves variance → 2 ReLUs = ÷4).
+    """
+    # Walk backwards to find last Linear
+    for module in reversed(list(mlp.modules())):
+        if isinstance(module, nn.Linear):
+            with torch.no_grad():
+                module.weight.mul_(gain)
+                if module.bias is not None:
+                    module.bias.zero_()
+            break
+
+
+# ────────────────────────────────────────────────────────────────────────────
 # Output Heads
 # ────────────────────────────────────────────────────────────────────────────
 
@@ -67,6 +86,8 @@ class ScalarHead(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden // 2, 1),
         )
+        # ── FIX: boost last layer so output std ≈ 1.0 at init ──
+        _boost_last_layer(self.mlp, gain=10.0)
 
     def forward(self, x: Tensor) -> Tensor:
         return self.mlp(x).squeeze(-1)   # (V,)
@@ -75,11 +96,6 @@ class ScalarHead(nn.Module):
 class VectorHead(nn.Module):
     """
     Per-vertex 3D vector prediction head (for WSS).
-
-    Takes the ρ₁ (tangent vector) channels from the last GEM layer and
-    decodes them back to ambient 3D vectors using the stored tangent frames.
-
-    If tangent frames are not available, falls back to a simple MLP.
 
     Input : (V, C) mixed features
     Output: (V, 3) vector field in ambient R³
@@ -94,6 +110,8 @@ class VectorHead(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden // 2, 3),
         )
+        # ── FIX: boost last layer so output std ≈ 1.0 at init ──
+        _boost_last_layer(self.mlp, gain=10.0)
 
     def forward(self, x: Tensor) -> Tensor:
         return self.mlp(x)   # (V, 3)
@@ -115,15 +133,10 @@ class GlobalHead(nn.Module):
             nn.ReLU(),
             nn.Linear(32, 1),
         )
+        # ── FIX: boost last layer (smaller gain — global targets are ~O(1)) ──
+        _boost_last_layer(self.mlp, gain=5.0)
 
     def forward(self, x: Tensor, batch: Optional[Tensor] = None) -> Tensor:
-        """
-        Args:
-            x    : (V, C) node features
-            batch: (V,)   batch assignment vector (None = single graph)
-        Returns:
-            (B,) global scalars
-        """
         if batch is None:
             batch = torch.zeros(x.shape[0], dtype=torch.long, device=x.device)
         pooled = global_mean_pool(x, batch)   # (B, C)
@@ -146,12 +159,6 @@ class F1AeroNet(nn.Module):
         head_dropout        : dropout in prediction heads
         break_symmetry_final: collapse last GEM output to scalars before heads
                              (beneficial when mesh orientation is consistent)
-
-    Usage:
-        model = F1AeroNet.from_config(cfg['model'])
-        pred = model(data.x, data.edge_index, data.edge_angles,
-                     data.edge_transporters)
-        # pred is dict with keys 'cp', 'wss', 'cd', 'cl'
     """
 
     def __init__(
@@ -166,7 +173,6 @@ class F1AeroNet(nn.Module):
         super().__init__()
 
         if layer_specs is None:
-            # Default: matches configs/f1_base.yaml
             layer_specs = [(16,2), (32,2), (32,3), (64,3), (64,2), (64,1)]
 
         # ── Input embedding: project scalar inputs to first feature type ──
@@ -195,18 +201,17 @@ class F1AeroNet(nn.Module):
         # ── Optional symmetry breaking: collapse to scalars ───────────────
         self.break_symmetry = break_symmetry_final
         if break_symmetry_final:
-            # Count scalar (ρ₀) channels only
             n_scalars = sum(mult for order, mult in last_ftype if order == 0)
             self.sym_break_proj = nn.Linear(last_dim, n_scalars, bias=False)
             head_in = n_scalars
         else:
             head_in = last_dim
 
-        # ── Prediction heads ──────────────────────────────────────────────
+        # ── Prediction heads (now with boosted init) ──────────────────────
         self.cp_head  = ScalarHead(head_in, hidden=head_hidden, dropout=head_dropout)
         self.wss_head = VectorHead(head_in, hidden=head_hidden, dropout=head_dropout)
         self.cd_head  = GlobalHead(head_in, hidden=head_hidden // 2, dropout=head_dropout)
-        self.cl_head  = None #no cl in data
+        self.cl_head  = GlobalHead(head_in, hidden=head_hidden // 2, dropout=head_dropout)
 
     @classmethod
     def from_config(cls, cfg: dict) -> 'F1AeroNet':
@@ -255,13 +260,13 @@ class F1AeroNet(nn.Module):
         cp  = self.cp_head(h_heads)              # (V,)
         wss = self.wss_head(h_heads)             # (V, 3)
         cd  = self.cd_head(h_heads, batch)       # (B,)
-        cl  = None
+        cl  = self.cl_head(h_heads, batch)       # (B,)
 
-        return {'cp': cp, 'wss': wss, 'cd': cd, 'cl': None}
+        return {'cp': cp, 'wss': wss, 'cd': cd, 'cl': cl}
 
     def count_parameters(self) -> dict:
         """Count trainable parameters by component."""
-        def count(m): return sum(p.numel() for p in m.parameters() if p.requires_grad) if m is not None else 0
+        def count(m): return sum(p.numel() for p in m.parameters() if p.requires_grad)
         return {
             'input_embed': count(self.input_embed),
             'gem_blocks':  sum(count(b) for b in self.blocks),
