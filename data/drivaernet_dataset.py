@@ -128,6 +128,11 @@ def mesh_to_pyg_data(raw, rho=1.225, U_inf=83.33, design_id="") -> Data:
     U_col = torch.full((verts_t.shape[0], 1), U_inf/U_ref)  # normalise U_inf to order 1 for better training stability
     x = normalise_mesh(torch.cat([verts_t, U_col], dim=-1))
 
+    # Positional encoding: global context (floor vs roof, front vs rear)
+    x_frac = ((verts_t[:, 0] - verts_t[:, 0].min()) / (verts_t[:, 0].max() - verts_t[:, 0].min() + 1e-8)).unsqueeze(1)
+    z_frac = ((verts_t[:, 2] - verts_t[:, 2].min()) / (verts_t[:, 2].max() - verts_t[:, 2].min() + 1e-8)).unsqueeze(1)
+    x = torch.cat([x, x_frac, z_frac], dim=-1)  # (V, 6)
+
     # ── Cp ────────────────────────────────────────────────────────────────
     q_inf = 0.5 * rho * U_inf ** 2
     P_INF = 0.0
@@ -169,12 +174,6 @@ def mesh_to_pyg_data(raw, rho=1.225, U_inf=83.33, design_id="") -> Data:
     # ── Graph geometry ────────────────────────────────────────────────────
     edge_index = build_edge_index_from_faces(faces_t)
     geo = precompute_geometry(verts_t, faces_t, edge_index)
-    # In mesh_to_pyg_data, add to input features:
-    x_frac = (verts_t[:, 0] - verts_t[:, 0].min()) / (verts_t[:, 0].max() - verts_t[:, 0].min())  # 0=front, 1=rear
-    z_frac = (verts_t[:, 2] - verts_t[:, 2].min()) / (verts_t[:, 2].max() - verts_t[:, 2].min())  # 0=bottom, 1=top
-    # Now the model KNOWS a vertex is on the floor vs the roof
-    
-    # In mesh_to_pyg_data, add to the Data constructor:
     return Data(
         x                 = x,
         edge_index        = edge_index,
