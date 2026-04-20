@@ -173,6 +173,8 @@ def mesh_to_pyg_data(raw, rho=1.225, U_inf=83.33, design_id="") -> Data:
     x_frac = (verts_t[:, 0] - verts_t[:, 0].min()) / (verts_t[:, 0].max() - verts_t[:, 0].min())  # 0=front, 1=rear
     z_frac = (verts_t[:, 2] - verts_t[:, 2].min()) / (verts_t[:, 2].max() - verts_t[:, 2].min())  # 0=bottom, 1=top
     # Now the model KNOWS a vertex is on the floor vs the roof
+    
+    # In mesh_to_pyg_data, add to the Data constructor:
     return Data(
         x                 = x,
         edge_index        = edge_index,
@@ -182,12 +184,14 @@ def mesh_to_pyg_data(raw, rho=1.225, U_inf=83.33, design_id="") -> Data:
         edge_transporters = geo['transporters'],
         y_cp              = cp_nd,
         y_wss             = wss_nd,
-        wss_mean          = wss_mean,
-        wss_std           = wss_std,
         y_cd              = cd,
         y_cl              = cl,
         design_id         = design_id,
         num_nodes         = verts_t.shape[0],
+        cp_sl_mean        = cp_mean,
+        cp_sl_std         = cp_std,
+        wss_sl_mean       = wss_mean,
+        wss_sl_std        = wss_std,
     )
 
 class DrivAerNetDataset(Dataset):
