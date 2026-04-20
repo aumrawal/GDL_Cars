@@ -17,7 +17,7 @@ from data.mesh_geometry import (
     precompute_geometry,
     build_edge_index_from_faces,
 )
-from data.transforms import normalise_mesh
+from data.transforms import normalise_mesh, symlog
 
 try:
     import pyvista as pv
@@ -134,11 +134,12 @@ def mesh_to_pyg_data(raw, rho=1.225, U_inf=83.33, design_id="") -> Data:
 
     if pressure is not None:
         cp_raw  = (pressure - P_INF) / q_inf        # dimensionless
-        cp_mean = cp_raw.mean()
-        cp_std  = cp_raw.std().clip(1e-8)
+        cp_sl   = symlog(cp_raw)                    # compress heavy tails
+        cp_mean = cp_sl.mean()
+        cp_std  = cp_sl.std().clip(1e-8)
         cp_nd   = torch.from_numpy(
-                    ((cp_raw - cp_mean) / cp_std).astype(np.float32)
-                  )
+                    np.clip((cp_sl - cp_mean) / cp_std, -5.0, 5.0).astype(np.float32)
+                  )                                       # ±5σ Winsorisation
     else:
         cp_nd = torch.zeros(verts_t.shape[0])
 
@@ -149,11 +150,12 @@ def mesh_to_pyg_data(raw, rho=1.225, U_inf=83.33, design_id="") -> Data:
     if wss is not None:
         tau_ref  = mu * U_inf / L_ref
         wss_new  = wss / tau_ref
+        wss_new  = symlog(wss_new)              # compress heavy tails
         wss_mean = wss_new.mean()
         wss_std  = wss_new.std().clip(1e-8)
         wss_nd   = torch.from_numpy(
-                    ((wss_new - wss_mean) / wss_std).astype(np.float32)
-                   )
+                    np.clip((wss_new - wss_mean) / wss_std, -5.0, 5.0).astype(np.float32)
+                )                           # ±5σ Winsorisation
     else:
         wss_nd   = torch.zeros(verts_t.shape[0], 3)
         wss_mean = 0.0
@@ -167,7 +169,10 @@ def mesh_to_pyg_data(raw, rho=1.225, U_inf=83.33, design_id="") -> Data:
     # ── Graph geometry ────────────────────────────────────────────────────
     edge_index = build_edge_index_from_faces(faces_t)
     geo = precompute_geometry(verts_t, faces_t, edge_index)
-
+    # In mesh_to_pyg_data, add to input features:
+    x_frac = (verts_t[:, 0] - verts_t[:, 0].min()) / (verts_t[:, 0].max() - verts_t[:, 0].min())  # 0=front, 1=rear
+    z_frac = (verts_t[:, 2] - verts_t[:, 2].min()) / (verts_t[:, 2].max() - verts_t[:, 2].min())  # 0=bottom, 1=top
+    # Now the model KNOWS a vertex is on the floor vs the roof
     return Data(
         x                 = x,
         edge_index        = edge_index,
@@ -233,7 +238,10 @@ class DrivAerNetDataset(Dataset):
         raw  = load_merged_vtp(vtp_path)
         data = mesh_to_pyg_data(raw, rho=self.rho, U_inf=self.U_inf,
                                   design_id=did)
-        torch.save(data, cache_path)
+        try:
+            torch.save(data, cache_path)
+        except Exception as e:
+            print(f'    Cache save skipped: {e}')
         return data
 
 

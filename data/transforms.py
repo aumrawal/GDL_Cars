@@ -28,13 +28,19 @@ from torch import Tensor
 # Symlog: symmetric log transform for heavy-tailed CFD data
 # ────────────────────────────────────────────────────────────────────────────
 
-def symlog(x: Tensor) -> Tensor:
-    """Symmetric log: sign(x) * log(1 + |x|).  Compresses tails, preserves sign."""
+def symlog(x):
+    """Symmetric log: sign(x) * log(1 + |x|). Works on both numpy and torch."""
+    import numpy as np
+    if isinstance(x, np.ndarray):
+        return np.sign(x) * np.log1p(np.abs(x))
     return x.sign() * torch.log1p(x.abs())
 
 
-def inv_symlog(x: Tensor) -> Tensor:
+def inv_symlog(x):
     """Inverse of symlog: sign(x) * (exp(|x|) - 1)."""
+    import numpy as np
+    if isinstance(x, np.ndarray):
+        return np.sign(x) * (np.exp(np.abs(x)) - 1.0)
     return x.sign() * (torch.exp(x.abs()) - 1.0)
 
 

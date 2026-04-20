@@ -211,7 +211,7 @@ class F1AeroNet(nn.Module):
         self.cp_head  = ScalarHead(head_in, hidden=head_hidden, dropout=head_dropout)
         self.wss_head = VectorHead(head_in, hidden=head_hidden, dropout=head_dropout)
         self.cd_head  = GlobalHead(head_in, hidden=head_hidden // 2, dropout=head_dropout)
-        self.cl_head  = GlobalHead(head_in, hidden=head_hidden // 2, dropout=head_dropout)
+        self.cl_head  = None   # cl not in DrivAerNet WWS_WM subset
 
     @classmethod
     def from_config(cls, cfg: dict) -> 'F1AeroNet':
@@ -260,13 +260,13 @@ class F1AeroNet(nn.Module):
         cp  = self.cp_head(h_heads)              # (V,)
         wss = self.wss_head(h_heads)             # (V, 3)
         cd  = self.cd_head(h_heads, batch)       # (B,)
-        cl  = self.cl_head(h_heads, batch)       # (B,)
+        cl  = self.cl_head(h_heads, batch) if self.cl_head is not None else None
 
         return {'cp': cp, 'wss': wss, 'cd': cd, 'cl': cl}
 
     def count_parameters(self) -> dict:
         """Count trainable parameters by component."""
-        def count(m): return sum(p.numel() for p in m.parameters() if p.requires_grad)
+        def count(m): return sum(p.numel() for p in m.parameters() if p.requires_grad) if m is not None else 0
         return {
             'input_embed': count(self.input_embed),
             'gem_blocks':  sum(count(b) for b in self.blocks),
