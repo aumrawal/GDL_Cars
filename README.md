@@ -265,24 +265,25 @@ Key hyperparameters from `configs/f1_base.yaml`:
 
 ```yaml
 model:
-  max_freq: 2           # Fourier modes: ρ₀, ρ₁, ρ₂
-  nonlin_samples: 5     # RegularNonlinearity quadrature points
-  layer_types:          # [multiplicity, max_irrep_order] per GEMBlock
-    - [8, 1]
-    - [8, 1]
-    - [8, 2]
-    - [8, 2]
-    - [8, 1]
-    - [8, 0]
+  in_channels: 6
+  layer_types:
+    - [8,  2]
+    - [8,  2]
+    - [16, 2]
+    - [32, 1]
+    - [8,  1]
+  max_freq: 2
+  nonlin_samples: 5
+  head_dropout: 0.1
+  break_symmetry_final: true
 
 training:
-  lr: 3.0e-4            # AdamW; reduced from 1e-3 for small dataset stability
+  lr: 3.0e-4     
   epochs: 50
   loss_weights:
     cp:  1.0            # MSE — normalised (std ≈ 1)
     wss: 1.0            # MSE — viscous scale τ_ref = 3.27×10⁻⁴ Pa
     cd:  0.1            # L1  — low variance across dataset
-    cl:  0.0            # Disabled (Cl = 0 in WWS_WM subset)
 ```
 
 ---
@@ -301,21 +302,6 @@ Correct normalisation was critical for training stability. Using the wrong refer
 
 ---
 
-## 🧪 Gauge Invariance Test
-
-Verify that Cp predictions are exactly rotation-invariant (architectural guarantee, not learned):
-
-```bash
-python test_f1_invariance_tiny.py \
-    --config configs/f1_base.yaml \
-    --checkpoint runs/best.pt
-```
-
-Expected: `max |Cp_rotated − Cp_original| < 1×10⁻⁴`
-
-> The test must recompute `edge_attr`, `edge_angles`, and parallel transporters in the rotated frame. Rotating only `data.pos` is insufficient and will give a false failure.
-
----
 
 ## 🖥️ Compute
 
