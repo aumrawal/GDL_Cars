@@ -72,39 +72,71 @@ def get_device():
 # Model loading
 # ═══════════════════════════════════════════════════════════════════════════
 
+# def load_model(checkpoint_path, device):
+#     """Load model from checkpoint, handling both trainer formats."""
+#     ckpt = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
+
+#     # Extract config
+#     cfg = ckpt.get('config', ckpt.get('cfg', {}))
+#     model_cfg = cfg.get('model', {
+#         'in_channels': 4,
+#         'layer_types': [[8,2],[8,2],[16,2],[16,2],[8,1],[8,1]],
+#         'nonlin_samples': 5,
+#         'head_dropout': 0.1,
+#         'break_symmetry_final': True,
+#     })
+
+#     model = F1AeroNet.from_config(model_cfg)
+
+#     # Handle different state dict keys
+#     state_dict = (
+#         ckpt.get('model_state_dict')
+#         or ckpt.get('model')
+#         or ckpt  # raw state dict
+#     )
+#     model.load_state_dict(state_dict, strict=False)
+#     model = model.to(device)
+#     model.eval()
+
+#     epoch = ckpt.get('epoch', '?')
+#     best_val = ckpt.get('best_val', '?')
+#     print(f"✓ Model loaded from {checkpoint_path}")
+#     print(f"  Epoch: {epoch}, Best val: {best_val}")
+#     params = model.count_parameters()
+#     print(f"  Parameters: {params['total']:,}")
+
+#     return model
+
 def load_model(checkpoint_path, device):
-    """Load model from checkpoint, handling both trainer formats."""
+    """Load model, inferring architecture strictly from checkpoint contents."""
     ckpt = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
 
-    # Extract config
-    cfg = ckpt.get('config', ckpt.get('cfg', {}))
-    model_cfg = cfg.get('model', {
-        'in_channels': 4,
-        'layer_types': [[8,2],[8,2],[16,2],[16,2],[8,1],[8,1]],
-        'nonlin_samples': 5,
-        'head_dropout': 0.1,
-        'break_symmetry_final': True,
-    })
+    # Step 1: try to get model config that was saved alongside the weights
+    saved_cfg  = ckpt.get('cfg', ckpt.get('config', {}))
+    model_cfg  = saved_cfg.get('model', None)
+    state_dict = ckpt.get('model') or ckpt.get('model_state_dict') or ckpt
 
+    # Step 2: if no config saved, infer in_channels from input_embed weight shape
+    #         and abort early with a clear message so the user can hardcode it
+    if model_cfg is None:
+        embed_w = state_dict.get('input_embed.weight')
+        if embed_w is not None:
+            in_ch = embed_w.shape[1]
+            print(f"  [INFO] input_embed.weight shape: {tuple(embed_w.shape)}")
+            print(f"         → in_channels={in_ch}, first_dim={embed_w.shape[0]}")
+        print("\n  [ERROR] Checkpoint contains no 'cfg'/'config' key.")
+        print("  Cannot auto-infer layer_types. Set KAGGLE_ARCH below to match")
+        print("  the layer_types used in trainer_kaggle.py and re-run.\n")
+        raise RuntimeError("No model config in checkpoint — see message above.")
+
+    print(f"  layer_types from checkpoint: {model_cfg.get('layer_types')}")
     model = F1AeroNet.from_config(model_cfg)
-
-    # Handle different state dict keys
-    state_dict = (
-        ckpt.get('model_state_dict')
-        or ckpt.get('model')
-        or ckpt  # raw state dict
-    )
     model.load_state_dict(state_dict, strict=False)
     model = model.to(device)
     model.eval()
 
-    epoch = ckpt.get('epoch', '?')
-    best_val = ckpt.get('best_val', '?')
-    print(f"✓ Model loaded from {checkpoint_path}")
-    print(f"  Epoch: {epoch}, Best val: {best_val}")
-    params = model.count_parameters()
-    print(f"  Parameters: {params['total']:,}")
-
+    print(f"✓ Loaded {checkpoint_path}  (epoch={ckpt.get('epoch','?')})")
+    print(f"  Parameters: {model.count_parameters()['total']:,}")
     return model
 
 
@@ -358,7 +390,7 @@ def main():
                         help='Output directory for plots and VTPs')
     parser.add_argument('--split', default='val', choices=['train', 'val', 'test'],
                         help='Which data split to visualise')
-    parser.add_argument('--max_samples', type=int, default=5,
+    parser.add_argument('--max_samples', type=int, default=2,
                         help='Max number of meshes to visualise')
     parser.add_argument('--show', action='store_true',
                         help='Show plots interactively (in addition to saving)')
