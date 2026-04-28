@@ -344,11 +344,4 @@ Correct normalisation was critical for training stability. Using the wrong refer
 
 <br/>
 
-<!-- FOOTER IMAGE PLACEHOLDER -->
-> 📸 **[INSERT: Optional footer banner — e.g. a grid of 4–6 car meshes with Cp colouring, small thumbnails, ~1400×200px]**
-
-<!--
-![Footer](assets/footer_grid.png)
--->
-
 </div>
