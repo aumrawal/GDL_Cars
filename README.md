@@ -12,6 +12,10 @@
 
 ### **Gauge Equivariant Mesh CNNs for Aerodynamic Field Prediction**
 *Predicting CFD outputs on 3D car meshes — without solving Navier-Stokes*
+*F1AeroNet is named after Formula 1 racing, where aerodynamic performance 
+is the decisive engineering frontier — the same surface pressure and drag 
+fields this model predicts are what F1 teams simulate thousands of times 
+per season to find fractions of a second.*
 
 <br/>
 
@@ -23,12 +27,9 @@
 
 <br/>
 
-<!-- BANNER IMAGE PLACEHOLDER -->
-> 📸 **[INSERT: Wide banner — predicted Cp field rendered in ParaView over a full car surface, side profile view, dark background. Suggested: 1400×500px]**
 
-<!--
 ![F1AeroNet Banner](assets/banner.png)
--->
+
 
 <br/>
 
@@ -68,33 +69,28 @@ F1AeroNet       →   anisotropic kernel →   direction-aware, gauge-equivarian
 <!-- CP COMPARISON PLACEHOLDER -->
 > 📸 **[INSERT: Side-by-side comparison — Left: F1AeroNet predicted Cp | Right: OpenFOAM ground truth. Suggested layout: two images of equal size, ~700×400px each, separated by a thin divider. Label each panel.]**
 
-<!--
+
 | Predicted | Ground Truth |
 |:---------:|:------------:|
 | ![Cp Predicted](assets/cp_predicted.png) | ![Cp Ground Truth](assets/cp_groundtruth.png) |
--->
+
 
 <br/>
 
-### Wall Shear Stress — WSS Vector Field
+### Wall Shear Stress — WSS Vector Field Magnitude
 
-<!-- WSS PLACEHOLDER -->
-> 📸 **[INSERT: WSS vector field overlay on underbody mesh — top-down view. Arrows coloured by magnitude. Suggested: 1000×500px]**
 
-<!--
+
 ![WSS Field](assets/wss_field.png)
--->
+
 
 <br/>
 
 ### Training Convergence
 
-<!-- LOSS CURVE PLACEHOLDER -->
-> 📸 **[INSERT: matplotlib training loss curve — total loss, Cp loss, WSS loss, Cd loss vs. epoch. Dark background recommended. Suggested: 900×400px]**
 
-<!--
 ![Loss Curve](assets/loss_curve.png)
--->
+
 
 <br/>
 
