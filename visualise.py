@@ -17,7 +17,7 @@ Usage:
     python visualise_local.py \
         --checkpoint runs/best.pt \
         --data_root data/drivaernet_tiny \
-        --out outputs/viz \
+        --out outputs/viz_2 \
         --split val \
         --max_samples 5
 """
@@ -382,11 +382,11 @@ def export_vtp(verts, faces, fields, out_path):
 
 def main():
     parser = argparse.ArgumentParser(description='Visualise F1AeroNet predictions locally')
-    parser.add_argument('--checkpoint', default='runs/best.pt',
+    parser.add_argument('--checkpoint', default='runs_200/best.pt',
                         help='Path to model checkpoint')
     parser.add_argument('--data_root', default='data/drivaernet_tiny',
                         help='Path to dataset root')
-    parser.add_argument('--out', default='outputs/viz',
+    parser.add_argument('--out', default='outputs/viz_2',
                         help='Output directory for plots and VTPs')
     parser.add_argument('--split', default='val', choices=['train', 'val', 'test'],
                         help='Which data split to visualise')
