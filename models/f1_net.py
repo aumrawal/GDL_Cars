@@ -218,7 +218,7 @@ class F1AeroNet(nn.Module):
         """Construct from a config dict (see configs/f1_base.yaml)."""
         specs = [tuple(s) for s in cfg.get('layer_types', [(16,2),(32,2),(32,3),(64,3),(64,2),(64,1)])]
         return cls(
-            in_channels          = cfg.get('in_channels', 4),
+            in_channels          = cfg.get('in_channels', 6),
             layer_specs          = specs,
             N_nonlin             = cfg.get('nonlin_samples', 7),
             head_hidden          = 128,

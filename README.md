@@ -98,11 +98,14 @@ F1AeroNet       →   anisotropic kernel →   direction-aware, gauge-equivarian
 
 | Metric | Value |
 |--------|-------|
-| Cp MAE | `[INSERT]` |
-| Cp R² | `[INSERT]` |
-| WSS MAE | `[INSERT]` |
-| Cd L1 Error | `[INSERT]` |
-| Cd Relative Error | `[INSERT] %` |
+| Cp MAE |0.12142|
+| Cp RMSE|0.63755|
+| Cp R²  |0.0846 |
+| WSS MAE|0.14923|
+|WSS RSME|0.79070|
+|WSS AngErr|17.12°|
+| Cd MAE | 0.01719 |
+| Cd Relative Error | 6.87 % |
 | Training Meshes | 200 |
 | Validation Meshes | 20 |
 | Total Parameters | ~138k |
