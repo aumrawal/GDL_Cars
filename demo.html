@@ -1,0 +1,1718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>F1AeroGEM — Gauge Equivariant Mesh CNN for Aerodynamic Prediction</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg-primary: #0d1117;
+    --bg-secondary: #161b22;
+    --bg-tertiary: #1c2128;
+    --bg-card: #21262d;
+    --border: #30363d;
+    --border-subtle: #21262d;
+    --border-bright: #444c56;
+    --accent: #00d4ff;
+    --accent-dim: rgba(0,212,255,0.12);
+    --accent-glow: rgba(0,212,255,0.35);
+    --text-primary: #e6edf3;
+    --text-secondary: #8b949e;
+    --text-muted: #484f58;
+    --red: #ff4444;
+    --green: #3fb950;
+    --orange: #f0883e;
+    --purple: #bc8cff;
+    --yellow: #e3b341;
+    --font: 'Inter', system-ui, -apple-system, sans-serif;
+    --mono: 'JetBrains Mono', 'Courier New', monospace;
+    --radius: 8px;
+    --sidebar-w: 310px;
+  }
+
+  html, body { height: 100%; overflow: hidden; font-family: var(--font); background: var(--bg-primary); color: var(--text-primary); font-size: 13px; line-height: 1.5; }
+
+  /* ── LAYOUT ── */
+  .app { display: flex; flex-direction: column; height: 100vh; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px; height: 54px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0; z-index: 10;
+  }
+
+  .header-brand { display: flex; align-items: center; gap: 14px; }
+
+  .brand-logo {
+    width: 36px; height: 36px;
+    background: linear-gradient(135deg, #00d4ff 0%, #0055ff 100%);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 15px; color: #fff; letter-spacing: -0.5px;
+    box-shadow: 0 0 20px rgba(0,212,255,0.45);
+    flex-shrink: 0;
+  }
+
+  .brand-text h1 { font-size: 16px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.3px; }
+  .brand-text h1 span { color: var(--accent); }
+  .brand-text p { font-size: 11px; color: var(--text-secondary); font-weight: 400; margin-top: 1px; }
+
+  .header-right { display: flex; align-items: center; gap: 8px; }
+
+  .badge {
+    font-size: 10px; font-weight: 600;
+    padding: 3px 9px; border-radius: 20px;
+    letter-spacing: 0.4px; text-transform: uppercase;
+  }
+  .badge-research { background: rgba(188,140,255,0.15); color: var(--purple); border: 1px solid rgba(188,140,255,0.3); }
+  .badge-live { background: rgba(63,185,80,0.15); color: var(--green); border: 1px solid rgba(63,185,80,0.3); }
+
+  .main-content { display: flex; flex: 1; overflow: hidden; }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    width: var(--sidebar-w); flex-shrink: 0;
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    overflow-y: auto; overflow-x: hidden;
+  }
+  .sidebar::-webkit-scrollbar { width: 4px; }
+  .sidebar::-webkit-scrollbar-track { background: transparent; }
+  .sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  .sidebar-section { padding: 15px 16px; border-bottom: 1px solid var(--border-subtle); }
+
+  .section-label {
+    font-size: 10px; font-weight: 600; letter-spacing: 1px;
+    text-transform: uppercase; color: var(--text-muted); margin-bottom: 11px;
+  }
+
+  /* Upload zone */
+  .upload-zone {
+    border: 1.5px dashed var(--border-bright);
+    border-radius: var(--radius); padding: 18px 14px;
+    text-align: center; cursor: pointer; transition: all 0.2s;
+    background: var(--bg-tertiary); position: relative;
+  }
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent); background: var(--accent-dim);
+  }
+  .upload-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .upload-icon { font-size: 22px; margin-bottom: 7px; display: block; }
+  .upload-title { font-size: 12px; font-weight: 600; color: var(--text-primary); margin-bottom: 2px; }
+  .upload-sub { font-size: 11px; color: var(--text-secondary); }
+
+  .file-status {
+    font-size: 11px; margin-top: 8px; text-align: center;
+    color: var(--text-secondary); min-height: 16px;
+  }
+  .file-status.ok { color: var(--green); }
+  .file-status.err { color: var(--red); }
+
+  .demo-btn {
+    width: 100%; margin-top: 8px; padding: 8px 12px;
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius); color: var(--accent);
+    font-size: 11px; font-weight: 600; cursor: pointer;
+    transition: all 0.2s; font-family: var(--font); letter-spacing: 0.2px;
+  }
+  .demo-btn:hover { background: var(--accent-dim); border-color: var(--accent); }
+
+  /* Mesh info grid */
+  .mesh-info { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .info-card { background: var(--bg-tertiary); border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 9px 10px; }
+  .info-card .lbl { font-size: 10px; color: var(--text-muted); font-weight: 500; margin-bottom: 2px; }
+  .info-card .val { font-size: 14px; font-weight: 600; color: var(--text-primary); font-family: var(--mono); }
+  .info-card .val.accent { color: var(--accent); }
+
+  /* Run button */
+  .run-btn {
+    width: 100%; padding: 12px 16px;
+    background: linear-gradient(135deg, #00d4ff 0%, #0066ff 100%);
+    border: none; border-radius: var(--radius);
+    color: #000; font-size: 13px; font-weight: 700;
+    cursor: pointer; transition: all 0.2s; font-family: var(--font);
+    letter-spacing: 0.3px;
+    box-shadow: 0 4px 18px rgba(0,212,255,0.3);
+    position: relative; overflow: hidden;
+  }
+  .run-btn::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 60%);
+  }
+  .run-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(0,212,255,0.45); }
+  .run-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  /* Progress */
+  .progress-container { display: none; margin-top: 12px; }
+  .progress-container.active { display: block; }
+  .progress-step {
+    display: flex; align-items: center; gap: 9px;
+    padding: 5px 0; font-size: 11px; color: var(--text-secondary); transition: color 0.3s;
+  }
+  .progress-step.active { color: var(--accent); }
+  .progress-step.done { color: var(--green); }
+  .step-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--text-muted); flex-shrink: 0; transition: all 0.3s;
+  }
+  .progress-step.active .step-dot { background: var(--accent); box-shadow: 0 0 8px var(--accent); animation: pulse 0.9s ease-in-out infinite; }
+  .progress-step.done .step-dot { background: var(--green); }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1);} 50%{opacity:0.5;transform:scale(0.75);} }
+  .progress-bar-track { height: 3px; background: var(--bg-tertiary); border-radius: 3px; margin-top: 10px; overflow: hidden; }
+  .progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), #0066ff); border-radius: 3px; transition: width 0.35s ease; box-shadow: 0 0 8px var(--accent-glow); }
+
+  /* Viz toggles */
+  .viz-toggles { display: flex; flex-direction: column; gap: 5px; }
+  .toggle-btn {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 11px;
+    background: var(--bg-tertiary); border: 1px solid var(--border-subtle);
+    border-radius: var(--radius); cursor: pointer; transition: all 0.18s;
+    font-family: var(--font); color: var(--text-secondary);
+    font-size: 12px; font-weight: 500; text-align: left;
+  }
+  .toggle-btn:hover { border-color: var(--border); color: var(--text-primary); background: var(--bg-card); }
+  .toggle-btn.active { border-color: var(--accent); background: var(--accent-dim); color: var(--accent); }
+  .toggle-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; transition: all 0.2s; }
+  .toggle-btn.active .toggle-dot { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+
+  .wss-toggle-wrap {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 9px 11px; background: var(--bg-tertiary); border: 1px solid var(--border-subtle);
+    border-radius: var(--radius); cursor: pointer; transition: all 0.18s;
+    font-size: 12px; font-weight: 500; color: var(--text-secondary); margin-top: 5px;
+  }
+  .wss-toggle-wrap:hover { border-color: var(--border); color: var(--text-primary); }
+  .wss-toggle-wrap.on { border-color: var(--orange); background: rgba(240,136,62,0.1); color: var(--orange); }
+  .pill-switch { width: 32px; height: 18px; background: var(--bg-card); border-radius: 9px; border: 1px solid var(--border); position: relative; transition: all 0.2s; flex-shrink: 0; }
+  .pill-switch::after { content: ''; position: absolute; width: 12px; height: 12px; background: var(--text-muted); border-radius: 50%; top: 2px; left: 2px; transition: all 0.2s; }
+  .wss-toggle-wrap.on .pill-switch { background: var(--orange); border-color: var(--orange); }
+  .wss-toggle-wrap.on .pill-switch::after { background: #fff; left: 16px; }
+
+  /* Stats */
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat-card {
+    background: var(--bg-tertiary); border: 1px solid var(--border-subtle);
+    border-radius: var(--radius); padding: 12px 11px;
+    position: relative; overflow: hidden; transition: border-color 0.4s;
+  }
+  .stat-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    opacity: 0; transition: opacity 0.5s;
+  }
+  .stat-card.cd-card::before { background: linear-gradient(90deg, var(--orange), transparent); }
+  .stat-card.cl-card::before { background: linear-gradient(90deg, var(--accent), transparent); }
+  .stat-card.loaded::before { opacity: 1; }
+  .stat-card.loaded { border-color: var(--border-bright); }
+
+  .stat-label {
+    font-size: 10px; color: var(--text-muted); font-weight: 500;
+    text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px;
+    display: flex; align-items: center; gap: 4px;
+  }
+
+  /* Tooltip */
+  .tip-icon {
+    width: 14px; height: 14px; background: var(--bg-card);
+    border: 1px solid var(--border); border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 8px; cursor: help; color: var(--text-muted); flex-shrink: 0;
+    position: relative; z-index: 1;
+  }
+  .tip-icon:hover .tip-text { display: block; }
+  .tip-text {
+    display: none; position: absolute; bottom: calc(100% + 7px); left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-card); border: 1px solid var(--border-bright);
+    border-radius: var(--radius); padding: 9px 11px;
+    font-size: 11px; color: var(--text-secondary);
+    white-space: normal; max-width: 210px; z-index: 100;
+    line-height: 1.45; font-weight: 400;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.45);
+    pointer-events: none;
+  }
+
+  .stat-value {
+    font-size: 26px; font-weight: 700; font-family: var(--mono);
+    color: var(--text-primary); line-height: 1; margin-bottom: 4px;
+    transition: color 0.4s;
+  }
+  .stat-value.cd { color: var(--orange); }
+  .stat-value.cl { color: var(--accent); }
+  .stat-value.placeholder { color: var(--text-muted); font-size: 18px; }
+
+  .stat-delta { font-size: 10px; color: var(--text-muted); font-family: var(--mono); }
+  .stat-delta.better { color: var(--green); }
+  .stat-delta.worse { color: var(--red); }
+
+  .kv-list { display: flex; flex-direction: column; gap: 0; margin-top: 8px; }
+  .kv-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--border-subtle); }
+  .kv-row:last-child { border-bottom: none; }
+  .kv-key { font-size: 11px; color: var(--text-muted); display: flex; align-items: center; gap: 4px; }
+  .kv-val { font-size: 11px; color: var(--text-primary); font-family: var(--mono); font-weight: 600; }
+
+  /* Download */
+  .download-btn {
+    width: 100%; padding: 9px 14px;
+    background: var(--bg-card); border: 1px solid var(--green);
+    border-radius: var(--radius); color: var(--green);
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    transition: all 0.2s; font-family: var(--font);
+    display: none; align-items: center; justify-content: center; gap: 6px;
+    margin-top: 10px;
+  }
+  .download-btn.visible { display: flex; }
+  .download-btn:hover { background: rgba(63,185,80,0.12); }
+
+  /* Camera */
+  .camera-controls { display: flex; gap: 5px; flex-wrap: wrap; }
+  .ctrl-btn {
+    flex: 1; min-width: 50px; padding: 7px 6px;
+    background: var(--bg-tertiary); border: 1px solid var(--border-subtle);
+    border-radius: var(--radius); color: var(--text-secondary);
+    font-size: 11px; font-weight: 500; cursor: pointer;
+    transition: all 0.18s; font-family: var(--font); text-align: center;
+  }
+  .ctrl-btn:hover { border-color: var(--border); color: var(--text-primary); background: var(--bg-card); }
+
+  /* ── VIEWPORT ── */
+  .viewport { flex: 1; position: relative; overflow: hidden; background: var(--bg-primary); }
+  #canvas { display: block; width: 100%; height: 100%; }
+
+  /* Colorbar */
+  .colorbar {
+    position: absolute; right: 20px; top: 50%; transform: translateY(-50%);
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    opacity: 0; transition: opacity 0.5s; pointer-events: none;
+  }
+  .colorbar.visible { opacity: 1; pointer-events: auto; }
+  .colorbar-title { font-size: 10px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; writing-mode: vertical-lr; transform: rotate(180deg); white-space: nowrap; }
+  .colorbar-inner { position: relative; display: flex; align-items: center; gap: 5px; }
+  .colorbar-labels { display: flex; flex-direction: column; justify-content: space-between; height: 200px; font-size: 10px; font-family: var(--mono); color: var(--text-secondary); text-align: right; }
+  .colorbar-gradient { width: 16px; height: 200px; border-radius: 8px; border: 1px solid var(--border-bright); box-shadow: 0 2px 10px rgba(0,0,0,0.3); background: linear-gradient(to bottom, #ff2020, #ff6060, #ffffff, #4080ff, #0020ff); }
+  .colorbar-unit { font-size: 10px; color: var(--text-muted); font-family: var(--mono); }
+
+  /* Overlay */
+  .viewport-overlay {
+    position: absolute; inset: 0; display: flex;
+    align-items: center; justify-content: center;
+    background: rgba(13,17,23,0.88); backdrop-filter: blur(6px);
+    transition: opacity 0.4s, visibility 0.4s; z-index: 5;
+  }
+  .viewport-overlay.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+  .overlay-content { text-align: center; max-width: 380px; padding: 0 20px; }
+  .overlay-icon { font-size: 52px; margin-bottom: 18px; display: block; }
+  .overlay-title { font-size: 22px; font-weight: 700; color: var(--text-primary); margin-bottom: 10px; }
+  .overlay-sub { font-size: 13px; color: var(--text-secondary); line-height: 1.65; margin-bottom: 28px; }
+  .overlay-cta {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 13px 26px;
+    background: linear-gradient(135deg, var(--accent), #0066ff);
+    border: none; border-radius: var(--radius); color: #fff;
+    font-size: 13px; font-weight: 700; cursor: pointer; font-family: var(--font);
+    box-shadow: 0 4px 22px rgba(0,212,255,0.4); transition: all 0.2s; letter-spacing: 0.2px;
+  }
+  .overlay-cta:hover { transform: translateY(-1px); box-shadow: 0 6px 28px rgba(0,212,255,0.55); }
+
+  /* Viewport UI chrome */
+  .viewport-info { position: absolute; bottom: 16px; left: 16px; display: flex; gap: 7px; align-items: center; }
+  .info-chip { background: rgba(13,17,23,0.82); border: 1px solid var(--border); border-radius: 20px; padding: 4px 11px; font-size: 10px; font-family: var(--mono); color: var(--text-secondary); backdrop-filter: blur(4px); }
+  .info-chip.accent-chip { border-color: rgba(0,212,255,0.5); color: var(--accent); }
+
+  .viewport-top-right { position: absolute; top: 13px; right: 55px; display: flex; gap: 6px; }
+  .vp-btn {
+    background: rgba(13,17,23,0.82); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 6px 11px;
+    font-size: 10px; font-weight: 600; color: var(--text-secondary);
+    cursor: pointer; font-family: var(--font); backdrop-filter: blur(4px);
+    transition: all 0.18s; letter-spacing: 0.3px;
+  }
+  .vp-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .vp-btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+
+  /* Notification */
+  @keyframes spin { from{transform:rotate(0)} to{transform:rotate(360deg)} }
+  .notif {
+    position: absolute; top: 13px; left: 50%; transform: translateX(-50%) translateY(-70px);
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 9px 16px;
+    font-size: 12px; color: var(--text-primary); transition: transform 0.3s ease;
+    z-index: 50; white-space: nowrap; box-shadow: 0 4px 18px rgba(0,0,0,0.4);
+  }
+  .notif.show { transform: translateX(-50%) translateY(0); }
+  .notif.success { border-color: var(--green); color: var(--green); }
+  .notif.error { border-color: var(--red); color: var(--red); }
+
+  /* Scrollbars */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- HEADER -->
+  <header>
+    <div class="header-brand">
+      <div class="brand-logo">G</div>
+      <div class="brand-text">
+        <h1>F1Aero<span>GEM</span></h1>
+        <p>Gauge Equivariant Mesh CNN · Real-Time Aerodynamic Prediction</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <span class="badge badge-research">GEM-CNN v2.1</span>
+      <span class="badge badge-live">● Live Demo</span>
+    </div>
+  </header>
+
+  <div class="main-content">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+
+      <!-- Upload -->
+      <div class="sidebar-section">
+        <div class="section-label">Mesh Input</div>
+        <div class="upload-zone" id="uploadZone">
+          <input type="file" id="fileInput" accept=".obj,.stl" />
+          <span class="upload-icon">⬡</span>
+          <div class="upload-title">Drop OBJ / STL mesh here</div>
+          <div class="upload-sub">or click to browse · OBJ preferred</div>
+        </div>
+        <div class="file-status" id="fileStatus">No file loaded</div>
+        <button class="demo-btn" id="loadDemoBtn">⚡ Load Demo F1 Car Geometry</button>
+      </div>
+
+      <!-- Mesh Info -->
+      <div class="sidebar-section">
+        <div class="section-label">Mesh Properties</div>
+        <div class="mesh-info">
+          <div class="info-card">
+            <div class="lbl">Vertices</div>
+            <div class="val accent" id="vertCount">—</div>
+          </div>
+          <div class="info-card">
+            <div class="lbl">Faces</div>
+            <div class="val accent" id="faceCount">—</div>
+          </div>
+          <div class="info-card">
+            <div class="lbl">Type</div>
+            <div class="val" id="meshType">—</div>
+          </div>
+          <div class="info-card">
+            <div class="lbl">Source</div>
+            <div class="val" id="meshSource">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Inference -->
+      <div class="sidebar-section">
+        <div class="section-label">GEM-CNN Inference</div>
+        <button class="run-btn" id="runBtn" disabled>
+          <span id="runBtnText">Run Inference →</span>
+        </button>
+        <div class="progress-container" id="progressContainer">
+          <div class="progress-step" id="step0"><div class="step-dot"></div>Extracting mesh geometry...</div>
+          <div class="progress-step" id="step1"><div class="step-dot"></div>Computing gauge frames...</div>
+          <div class="progress-step" id="step2"><div class="step-dot"></div>Running GEM-CNN layers...</div>
+          <div class="progress-step" id="step3"><div class="step-dot"></div>Integrating surface forces...</div>
+          <div class="progress-step" id="step4"><div class="step-dot"></div>Post-processing fields...</div>
+          <div class="progress-bar-track"><div class="progress-bar-fill" id="progressBarFill" style="width:0%"></div></div>
+        </div>
+      </div>
+
+      <!-- Visualisation Mode -->
+      <div class="sidebar-section">
+        <div class="section-label">Visualisation Mode</div>
+        <div class="viz-toggles">
+          <button class="toggle-btn active" id="vizCp" onclick="setVizMode('cp')">
+            <div class="toggle-dot"></div>
+            <div>
+              <div style="font-weight:600">Pressure Coefficient (Cp)</div>
+              <div style="font-size:10px;color:var(--text-muted);margin-top:1px">Surface pressure field</div>
+            </div>
+          </button>
+          <button class="toggle-btn" id="vizWssMag" onclick="setVizMode('wss_mag')">
+            <div class="toggle-dot"></div>
+            <div>
+              <div style="font-weight:600">WSS Magnitude</div>
+              <div style="font-size:10px;color:var(--text-muted);margin-top:1px">Wall shear stress intensity</div>
+            </div>
+          </button>
+          <button class="toggle-btn" id="vizWssDir" onclick="setVizMode('wss_dir')">
+            <div class="toggle-dot"></div>
+            <div>
+              <div style="font-weight:600">WSS Direction</div>
+              <div style="font-size:10px;color:var(--text-muted);margin-top:1px">Flow direction on surface</div>
+            </div>
+          </button>
+        </div>
+        <div class="wss-toggle-wrap" id="wssArrowToggle" onclick="toggleWSSArrows()">
+          <div>
+            <div style="font-weight:600;font-size:12px">WSS Arrow Glyphs</div>
+            <div style="font-size:10px;color:var(--text-muted)">~200 sampled surface vectors</div>
+          </div>
+          <div class="pill-switch"></div>
+        </div>
+      </div>
+
+      <!-- Aerodynamic Results -->
+      <div class="sidebar-section">
+        <div class="section-label">Aerodynamic Coefficients</div>
+        <div class="stats-grid">
+          <div class="stat-card cd-card" id="cdCard">
+            <div class="stat-label">
+              Drag (Cd)
+              <span class="tip-icon">?<span class="tip-text">Drag Coefficient — measures aerodynamic resistance. Lower = faster. F1 cars: 0.7–1.0 (high-downforce). Road cars: ~0.25–0.35.</span></span>
+            </div>
+            <div class="stat-value cd placeholder" id="cdVal">—</div>
+            <div class="stat-delta" id="cdDelta"></div>
+          </div>
+          <div class="stat-card cl-card" id="clCard">
+            <div class="stat-label">
+              Downforce (Cl)
+              <span class="tip-icon">?<span class="tip-text">Lift Coefficient — negative = downforce pushing car into track. F1 cars achieve Cl ≈ −2.5 to −5.0 for maximum cornering grip.</span></span>
+            </div>
+            <div class="stat-value cl placeholder" id="clVal">—</div>
+            <div class="stat-delta" id="clDelta"></div>
+          </div>
+        </div>
+
+        <div class="kv-list">
+          <div class="kv-row">
+            <span class="kv-key">
+              L/D Ratio
+              <span class="tip-icon" style="display:inline-flex">?<span class="tip-text">Lift-to-drag ratio. Higher magnitude = more efficient downforce generation per unit of drag penalty.</span></span>
+            </span>
+            <span class="kv-val" id="ldVal">—</span>
+          </div>
+          <div class="kv-row">
+            <span class="kv-key">Cp range</span>
+            <span class="kv-val" id="cpRangeVal">—</span>
+          </div>
+          <div class="kv-row">
+            <span class="kv-key">
+              Peak WSS
+              <span class="tip-icon" style="display:inline-flex">?<span class="tip-text">Wall Shear Stress — tangential force per unit area exerted by airflow on the surface. Peaks indicate transition to turbulent boundary layer.</span></span>
+            </span>
+            <span class="kv-val" id="peakWSSVal">—</span>
+          </div>
+          <div class="kv-row">
+            <span class="kv-key">Inference time</span>
+            <span class="kv-val" id="inferTimeVal">—</span>
+          </div>
+        </div>
+
+        <button class="download-btn" id="downloadBtn" onclick="downloadResults()">
+          ↓ Download Results (CSV)
+        </button>
+      </div>
+
+      <!-- Camera Controls -->
+      <div class="sidebar-section">
+        <div class="section-label">Camera</div>
+        <div class="camera-controls">
+          <button class="ctrl-btn" onclick="resetCamera()">↺ Reset</button>
+          <button class="ctrl-btn" onclick="setCamPreset('top')">Top</button>
+          <button class="ctrl-btn" onclick="setCamPreset('side')">Side</button>
+          <button class="ctrl-btn" onclick="setCamPreset('front')">Front</button>
+          <button class="ctrl-btn" onclick="setCamPreset('rear')">Rear</button>
+        </div>
+        <div style="margin-top:9px;font-size:10px;color:var(--text-muted);line-height:1.6">
+          Left-drag: orbit · Right-drag: pan · Scroll: zoom
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- VIEWPORT -->
+    <div class="viewport" id="viewport">
+      <canvas id="canvas"></canvas>
+
+      <!-- Welcome overlay -->
+      <div class="viewport-overlay" id="viewportOverlay">
+        <div class="overlay-content">
+          <div class="overlay-icon">⬡</div>
+          <div class="overlay-title">F1AeroGEM</div>
+          <div class="overlay-sub">
+            Upload a surface mesh (OBJ/STL) or load the demo F1 car to begin aerodynamic field prediction using our Gauge Equivariant Mesh CNN.
+          </div>
+          <button class="overlay-cta" onclick="loadDemoMesh()">
+            ▶ Load Demo F1 Car
+          </button>
+        </div>
+      </div>
+
+      <!-- Top-right controls -->
+      <div class="viewport-top-right">
+        <button class="vp-btn" id="wireframeBtn" onclick="toggleWireframe()">Wireframe</button>
+        <button class="vp-btn" id="autoRotateBtn" onclick="toggleAutoRotate()">Auto-Rotate</button>
+      </div>
+
+      <!-- Colorbar -->
+      <div class="colorbar" id="colorbar">
+        <div class="colorbar-title" id="colorbarTitle">Cp</div>
+        <div class="colorbar-inner">
+          <div class="colorbar-labels" id="colorbarLabels">
+            <span id="cbMax">+1.0</span>
+            <span>+0.5</span>
+            <span>0.0</span>
+            <span>−0.5</span>
+            <span id="cbMin">−1.0</span>
+          </div>
+          <div class="colorbar-gradient" id="colorbarGradient"></div>
+        </div>
+        <div class="colorbar-unit" id="colorbarUnit">Cp [—]</div>
+      </div>
+
+      <!-- Bottom info chips -->
+      <div class="viewport-info">
+        <div class="info-chip" id="chipMode">Geometry Preview</div>
+        <div class="info-chip accent-chip" id="chipStatus">No predictions</div>
+      </div>
+
+      <div class="notif" id="notif"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// THREE.JS RENDERER
+// ─────────────────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setClearColor(0x0d1117, 1);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x0d1117, 0.038);
+
+const camera = new THREE.PerspectiveCamera(42, 1, 0.01, 500);
+
+// Lights
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.35);
+scene.add(ambientLight);
+
+const sunLight = new THREE.DirectionalLight(0xffffff, 1.1);
+sunLight.position.set(6, 10, 5);
+sunLight.castShadow = true;
+sunLight.shadow.camera.near = 0.1;
+sunLight.shadow.camera.far = 50;
+sunLight.shadow.camera.top = 8;
+sunLight.shadow.camera.bottom = -8;
+sunLight.shadow.camera.left = -8;
+sunLight.shadow.camera.right = 8;
+sunLight.shadow.mapSize.set(2048, 2048);
+scene.add(sunLight);
+
+const fillLight = new THREE.DirectionalLight(0x8ab4f8, 0.5);
+fillLight.position.set(-5, 6, -4);
+scene.add(fillLight);
+
+const rimLight = new THREE.DirectionalLight(0x00d4ff, 0.35);
+rimLight.position.set(0, -3, -6);
+scene.add(rimLight);
+
+const underLight = new THREE.PointLight(0x0040ff, 0.3, 20);
+underLight.position.set(0, -4, 0);
+scene.add(underLight);
+
+// Ground
+const groundGeo = new THREE.PlaneGeometry(30, 30, 1, 1);
+const groundMat = new THREE.MeshStandardMaterial({ color: 0x0f1318, roughness: 0.95, metalness: 0.05 });
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -1.5;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// Grid
+const gridHelper = new THREE.GridHelper(24, 36, 0x1a2030, 0x151c27);
+gridHelper.position.y = -1.49;
+scene.add(gridHelper);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────────────────────────────────────
+let mainMesh = null;
+let wssArrowGroup = null;
+let wireframeOverlay = null;
+let currentGeo = null;
+let vizMode = 'cp';
+let showWSSArrows = false;
+let inferenceComplete = false;
+let autoRotate = false;
+let wireframeOn = false;
+let predictions = null;
+let isDemo = false;
+let meshName = '';
+
+const orbit = {
+  isPointerDown: false,
+  isRightDown: false,
+  lastX: 0, lastY: 0,
+  theta: 0.55,
+  phi: 1.05,
+  radius: 8,
+  target: new THREE.Vector3(0, 0.2, 0),
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ORBIT CONTROLS
+// ─────────────────────────────────────────────────────────────────────────────
+const vp = document.getElementById('viewport');
+
+vp.addEventListener('pointerdown', (e) => {
+  if (e.button === 2) orbit.isRightDown = true;
+  else orbit.isPointerDown = true;
+  orbit.lastX = e.clientX;
+  orbit.lastY = e.clientY;
+  vp.setPointerCapture(e.pointerId);
+});
+
+vp.addEventListener('pointerup', () => {
+  orbit.isPointerDown = false;
+  orbit.isRightDown = false;
+});
+
+vp.addEventListener('pointermove', (e) => {
+  const dx = e.clientX - orbit.lastX;
+  const dy = e.clientY - orbit.lastY;
+  orbit.lastX = e.clientX;
+  orbit.lastY = e.clientY;
+
+  if (orbit.isPointerDown) {
+    orbit.theta -= dx * 0.0065;
+    orbit.phi = Math.max(0.04, Math.min(Math.PI - 0.04, orbit.phi + dy * 0.0065));
+    if (autoRotate) autoRotate = false;
+  }
+
+  if (orbit.isRightDown) {
+    const panSpeed = orbit.radius * 0.0008;
+    const right = new THREE.Vector3();
+    const camPos = new THREE.Vector3();
+    getCamPos(camPos);
+    right.crossVectors(camPos.clone().sub(orbit.target), new THREE.Vector3(0,1,0)).normalize();
+    orbit.target.addScaledVector(right, -dx * panSpeed);
+    orbit.target.y += dy * panSpeed * 0.7;
+  }
+});
+
+vp.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  orbit.radius = Math.max(1.2, Math.min(30, orbit.radius + e.deltaY * 0.012));
+}, { passive: false });
+
+vp.addEventListener('contextmenu', (e) => e.preventDefault());
+
+function getCamPos(out) {
+  const x = orbit.target.x + orbit.radius * Math.sin(orbit.phi) * Math.sin(orbit.theta);
+  const y = orbit.target.y + orbit.radius * Math.cos(orbit.phi);
+  const z = orbit.target.z + orbit.radius * Math.sin(orbit.phi) * Math.cos(orbit.theta);
+  if (out) { out.set(x, y, z); return out; }
+  return new THREE.Vector3(x, y, z);
+}
+
+function updateCamera() {
+  if (autoRotate) orbit.theta += 0.0025;
+  const pos = getCamPos();
+  camera.position.copy(pos);
+  camera.lookAt(orbit.target);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESIZE + RENDER LOOP
+// ─────────────────────────────────────────────────────────────────────────────
+function onResize() {
+  const w = vp.clientWidth, h = vp.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', onResize);
+onResize();
+
+function animate() {
+  requestAnimationFrame(animate);
+  updateCamera();
+  renderer.render(scene, camera);
+}
+animate();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COLOUR MAPS
+// ─────────────────────────────────────────────────────────────────────────────
+function cpColour(t) {
+  // blue → white → red diverging
+  const r = t < 0.5 ? t * 2 : 1;
+  const g = t < 0.5 ? t * 2 : (1 - t) * 2;
+  const b = t < 0.5 ? 1 : (1 - t) * 2;
+  return new THREE.Color(r, g, b);
+}
+
+function heatColour(t) {
+  // black → blue → cyan → green → yellow → red (scientific heatmap)
+  const stops = [
+    [0.02, 0.02, 0.15],
+    [0.0,  0.1,  0.9 ],
+    [0.0,  0.8,  0.9 ],
+    [0.0,  0.9,  0.1 ],
+    [0.9,  0.9,  0.0 ],
+    [0.95, 0.05, 0.0 ],
+  ];
+  const idx = t * (stops.length - 1);
+  const lo = Math.floor(idx);
+  const hi = Math.min(lo + 1, stops.length - 1);
+  const f = idx - lo;
+  const a = stops[lo], b = stops[hi];
+  return new THREE.Color(a[0]+(b[0]-a[0])*f, a[1]+(b[1]-a[1])*f, a[2]+(b[2]-a[2])*f);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SYNTHETIC PREDICTION ENGINE
+// ─────────────────────────────────────────────────────────────────────────────
+function seededRandom(seed) {
+  let s = seed >>> 0;
+  return () => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+}
+
+function generatePredictions(geometry) {
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+
+  const pos = geometry.attributes.position;
+  const nor = geometry.attributes.normal;
+  const n = pos.count;
+
+  const bb = geometry.boundingBox;
+  const cx = (bb.max.x + bb.min.x) / 2;
+  const cy = (bb.max.y + bb.min.y) / 2;
+  const cz = (bb.max.z + bb.min.z) / 2;
+  const sx = (bb.max.x - bb.min.x) || 1;
+  const sy = (bb.max.y - bb.min.y) || 1;
+  const sz = (bb.max.z - bb.min.z) || 1;
+
+  const rand = seededRandom(0xdeadbeef);
+  const cp = new Float32Array(n);
+  const wssX = new Float32Array(n), wssY = new Float32Array(n), wssZ = new Float32Array(n);
+  const wssMag = new Float32Array(n);
+
+  const tmp = new THREE.Vector3();
+  const flowDir = new THREE.Vector3(0, 0, -1); // freestream along -z
+
+  for (let i = 0; i < n; i++) {
+    // Normalise to [-0.5, 0.5]
+    const px = (pos.getX(i) - cx) / sx;
+    const py = (pos.getY(i) - cy) / sy;
+    const pz = (pos.getZ(i) - cz) / sz;
+
+    const nx = nor.getX(i);
+    const ny = nor.getY(i);
+    const nz = nor.getZ(i);
+
+    let cpVal = 0;
+
+    // 1. Stagnation zone — front face, centreline → Cp ~ +1
+    const stag = Math.max(0, nz) * Math.max(0, pz + 0.45) * (1 - Math.min(1, Math.abs(px) * 3)) ;
+    cpVal += stag * 0.95;
+
+    // 2. Upper surface suction — normals facing up on top surface → negative Cp
+    const topFactor = Math.max(0, ny) * (0.5 + py * 1.2);
+    cpVal -= topFactor * 1.55;
+
+    // 3. Underfloor extreme suction (ground effect)
+    const underFactor = Math.max(0, -ny) * Math.max(0, -py - 0.05);
+    cpVal -= underFactor * 3.0;
+
+    // 4. Rear wing suction
+    const rearWing = Math.exp(-20 * (pz + 0.42) * (pz + 0.42)) * Math.max(0, ny + 0.15);
+    cpVal -= rearWing * 1.8;
+
+    // 5. Front wing suction
+    const frontWing = Math.exp(-18 * (pz - 0.45) * (pz - 0.45)) * Math.max(0, -ny + 0.1);
+    cpVal -= frontWing * 1.2;
+
+    // 6. Side surfaces mild suction
+    const sideFactor = Math.abs(nx) * (0.3 + Math.abs(px) * 0.5);
+    cpVal -= sideFactor * 0.35;
+
+    // 7. Wake region — slight positive pressure recovery
+    cpVal += Math.max(0, -pz - 0.35) * 0.5 * (1 - Math.abs(px) * 2);
+
+    // 8. Wheel interference (positive pressure bumps)
+    const wdx1 = px - 0.38, wdx2 = px + 0.38;
+    const wdz1 = pz - 0.32, wdz2 = pz + 0.32;
+    const wheelBump = (Math.exp(-30*(wdx1*wdx1+wdz1*wdz1)) + Math.exp(-30*(wdx1*wdx1+wdz2*wdz2)) +
+                       Math.exp(-30*(wdx2*wdx2+wdz1*wdz1)) + Math.exp(-30*(wdx2*wdx2+wdz2*wdz2))) * 0.4;
+    cpVal += wheelBump;
+
+    // 9. Realistic noise (correlated, not pure white noise)
+    const noise = Math.sin(px * 28.3 + 1.1) * Math.cos(py * 22.7 + 2.2) * Math.sin(pz * 17.9 + 0.7) * 0.07
+                + Math.sin(px * 11.1) * Math.cos(pz * 13.5) * 0.04;
+    cpVal += noise * (rand() * 0.7 + 0.3);
+
+    cp[i] = Math.max(-1.8, Math.min(1.1, cpVal));
+
+    // WSS: project freestream onto surface tangent plane, modulate by local conditions
+    tmp.set(nx, ny, nz);
+    const proj = flowDir.clone().addScaledVector(tmp, -flowDir.dot(tmp));
+    const pLen = proj.length();
+    if (pLen > 0.001) proj.divideScalar(pLen);
+
+    // Local speed modulation
+    const localSpeed = 0.4 + Math.abs(cpVal) * 0.7 + rand() * 0.15;
+    // Add crossflow deflection near body shapes
+    const crossflow = Math.sin(py * Math.PI * 2) * 0.2 * Math.abs(nx);
+    wssX[i] = (proj.x + crossflow) * localSpeed;
+    wssY[i] = proj.y * localSpeed * 0.5;
+    wssZ[i] = (proj.z - Math.abs(py) * 0.1) * localSpeed;
+    wssMag[i] = Math.sqrt(wssX[i]*wssX[i] + wssY[i]*wssY[i] + wssZ[i]*wssZ[i]);
+  }
+
+  let cpMin = Infinity, cpMax = -Infinity;
+  let wssMax = 0;
+  for (let i = 0; i < n; i++) {
+    if (cp[i] < cpMin) cpMin = cp[i];
+    if (cp[i] > cpMax) cpMax = cp[i];
+    if (wssMag[i] > wssMax) wssMax = wssMag[i];
+  }
+
+  // Integrate Cd and Cl via panel method approximation
+  let cd = 0, cl = 0, totalArea = 0;
+  const hasIndex = !!geometry.index;
+  const faceCount = hasIndex ? geometry.index.count / 3 : pos.count / 3;
+
+  for (let f = 0; f < faceCount; f++) {
+    let ia, ib, ic;
+    if (hasIndex) {
+      ia = geometry.index.getX(f*3);
+      ib = geometry.index.getX(f*3+1);
+      ic = geometry.index.getX(f*3+2);
+    } else {
+      ia = f*3; ib = f*3+1; ic = f*3+2;
+    }
+    if (ia >= n || ib >= n || ic >= n) continue;
+
+    const va = new THREE.Vector3(pos.getX(ia), pos.getY(ia), pos.getZ(ia));
+    const vb = new THREE.Vector3(pos.getX(ib), pos.getY(ib), pos.getZ(ib));
+    const vc = new THREE.Vector3(pos.getX(ic), pos.getY(ic), pos.getZ(ic));
+    const e1 = vb.clone().sub(va);
+    const e2 = vc.clone().sub(va);
+    const cross = e1.clone().cross(e2);
+    const area = cross.length() * 0.5;
+    const faceNormal = cross.normalize();
+    const cpFace = (cp[ia] + cp[ib] + cp[ic]) / 3;
+    cd += cpFace * Math.abs(faceNormal.z) * area;
+    cl += cpFace * faceNormal.y * area;
+    totalArea += area;
+  }
+
+  const refArea = totalArea || 1;
+  const cdFinal = Math.max(0.22, Math.min(1.5, 0.65 + Math.abs(cd / refArea) * 0.25 + (rand() - 0.5) * 0.02));
+  const clFinal = Math.max(-6, Math.min(-0.4, -(1.8 + Math.abs(cl / refArea) * 1.8 + rand() * 0.08)));
+
+  return { cp, wssX, wssY, wssZ, wssMag, cpMin, cpMax, wssMax, cd: cdFinal, cl: clFinal, vertCount: n };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// APPLY VERTEX COLOURS
+// ─────────────────────────────────────────────────────────────────────────────
+function applyVertexColours(geometry, data) {
+  const n = geometry.attributes.position.count;
+  const colours = new Float32Array(n * 3);
+  let vals, minV, maxV, colFn;
+
+  if (vizMode === 'cp') {
+    vals = data.cp; minV = data.cpMin; maxV = data.cpMax; colFn = cpColour;
+  } else if (vizMode === 'wss_mag') {
+    vals = data.wssMag; minV = 0; maxV = data.wssMax; colFn = heatColour;
+  } else {
+    // Direction — HSL colour wheel from flow angle
+    vals = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      vals[i] = (Math.atan2(data.wssX[i], -data.wssZ[i]) + Math.PI) / (2 * Math.PI);
+    }
+    minV = 0; maxV = 1;
+    colFn = (t) => new THREE.Color().setHSL(t, 0.85, 0.52);
+  }
+
+  const range = maxV - minV || 1;
+  for (let i = 0; i < n; i++) {
+    const t = Math.max(0, Math.min(1, (vals[i] - minV) / range));
+    const col = colFn(t);
+    colours[i*3] = col.r; colours[i*3+1] = col.g; colours[i*3+2] = col.b;
+  }
+
+  if (geometry.attributes.color) {
+    geometry.attributes.color.array.set(colours);
+    geometry.attributes.color.needsUpdate = true;
+  } else {
+    geometry.setAttribute('color', new THREE.BufferAttribute(colours, 3));
+  }
+  return { minV, maxV };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WSS ARROW GLYPHS (3D arrows in scene)
+// ─────────────────────────────────────────────────────────────────────────────
+function buildWSSArrows(geometry, data) {
+  if (wssArrowGroup) { scene.remove(wssArrowGroup); wssArrowGroup = null; }
+
+  const pos = geometry.attributes.position;
+  const nor = geometry.attributes.normal;
+  const n = pos.count;
+  const sampleCount = Math.min(220, n);
+  const step = Math.max(1, Math.floor(n / sampleCount));
+
+  const group = new THREE.Group();
+
+  for (let i = 0; i < n; i += step) {
+    const origin = new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i));
+    const normal = new THREE.Vector3(nor.getX(i), nor.getY(i), nor.getZ(i)).normalize();
+    const dir = new THREE.Vector3(data.wssX[i], data.wssY[i], data.wssZ[i]);
+    const mag = data.wssMag[i];
+    if (mag < 0.01) continue;
+    dir.normalize();
+
+    const t = Math.min(mag / (data.wssMax || 1), 1);
+    const col = heatColour(t);
+
+    // Push off surface slightly
+    const arrowOrigin = origin.clone().addScaledVector(normal, 0.018);
+    const arrowLen = 0.055 + t * 0.09;
+
+    const mat = new THREE.MeshBasicMaterial({ color: col });
+
+    // Shaft
+    const shaftGeo = new THREE.CylinderGeometry(0.0025, 0.0025, arrowLen * 0.72, 4);
+    const shaft = new THREE.Mesh(shaftGeo, mat);
+    shaft.position.y = arrowLen * 0.36;
+
+    // Head
+    const headGeo = new THREE.ConeGeometry(0.007, arrowLen * 0.28, 5);
+    const head = new THREE.Mesh(headGeo, mat);
+    head.position.y = arrowLen * 0.86;
+
+    const arrow = new THREE.Group();
+    arrow.add(shaft);
+    arrow.add(head);
+    arrow.position.copy(arrowOrigin);
+
+    // Orient along flow direction
+    const up = new THREE.Vector3(0, 1, 0);
+    const quat = new THREE.Quaternion().setFromUnitVectors(up, dir);
+    arrow.quaternion.copy(quat);
+
+    group.add(arrow);
+  }
+
+  wssArrowGroup = group;
+  if (showWSSArrows) scene.add(wssArrowGroup);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PROCEDURAL F1 CAR GEOMETRY
+// ─────────────────────────────────────────────────────────────────────────────
+function buildDemoF1Geometry() {
+  const parts = [];
+
+  function addPart(geo, px, py, pz, rx, ry, rz) {
+    const d = new THREE.Object3D();
+    d.position.set(px, py, pz);
+    d.rotation.set(rx || 0, ry || 0, rz || 0);
+    d.updateMatrix();
+    geo.applyMatrix4(d.matrix);
+    geo.computeVertexNormals();
+    parts.push(geo);
+  }
+
+  // Monocoque body
+  const body = new THREE.BoxGeometry(0.72, 0.26, 3.4, 14, 5, 36);
+  taperGeo(body, 'z', 0.2, 0.65, 'x');
+  taperGeo(body, 'z', 0.2, 0.72, 'y');
+  addPart(body, 0, 0.06, 0);
+
+  // Engine cover / shark fin
+  const engineCover = new THREE.BoxGeometry(0.08, 0.38, 1.1, 2, 8, 16);
+  addPart(engineCover, 0, 0.28, -0.55);
+
+  // Nose cone (tapered cylinder)
+  const nose = new THREE.CylinderGeometry(0.045, 0.2, 1.1, 10, 5);
+  taperCyl(nose);
+  addPart(nose, 0, -0.01, 1.75, Math.PI/2, 0, 0);
+
+  // Sidepods (left & right)
+  for (const side of [-1, 1]) {
+    const pod = new THREE.BoxGeometry(0.26, 0.2, 1.4, 8, 4, 18);
+    addPart(pod, side * 0.45, -0.02, 0.18);
+    // Sidepod inlet
+    const inlet = new THREE.CylinderGeometry(0.07, 0.09, 0.05, 10);
+    addPart(inlet, side * 0.52, 0.04, 0.7, 0, 0, Math.PI/2);
+  }
+
+  // Floor
+  const floor = new THREE.BoxGeometry(1.08, 0.04, 2.8, 18, 1, 36);
+  addPart(floor, 0, -0.145, -0.05);
+
+  // Diffuser (angled upward at rear)
+  const diffuser = new THREE.BoxGeometry(0.92, 0.22, 0.65, 12, 5, 10);
+  addPart(diffuser, 0, -0.07, -1.6, 0.32, 0, 0);
+
+  // Halo (partial torus)
+  const halo = new THREE.TorusGeometry(0.2, 0.022, 8, 28, Math.PI * 1.05);
+  addPart(halo, 0, 0.36, 0.15, 0, 0, 0);
+
+  // Rear wing (main plane + flap)
+  const rwMain = new THREE.BoxGeometry(1.08, 0.058, 0.26, 18, 1, 5);
+  addPart(rwMain, 0, 0.62, -1.52, -0.12, 0, 0);
+  const rwFlap = new THREE.BoxGeometry(1.05, 0.04, 0.14, 16, 1, 4);
+  addPart(rwFlap, 0, 0.74, -1.44, -0.22, 0, 0);
+  // Rear wing endplates
+  for (const side of [-1, 1]) {
+    const ep = new THREE.BoxGeometry(0.024, 0.28, 0.3, 1, 6, 5);
+    addPart(ep, side * 0.525, 0.62, -1.52);
+  }
+
+  // Front wing (cascade + endplates)
+  const fwMain = new THREE.BoxGeometry(1.65, 0.042, 0.32, 26, 1, 6);
+  addPart(fwMain, 0, -0.13, 2.08, 0.07, 0, 0);
+  const fwFlap1 = new THREE.BoxGeometry(1.6, 0.032, 0.16, 24, 1, 4);
+  addPart(fwFlap1, 0, -0.09, 1.96, 0.1, 0, 0);
+  const fwFlap2 = new THREE.BoxGeometry(1.55, 0.028, 0.12, 22, 1, 3);
+  addPart(fwFlap2, 0, -0.05, 1.88, 0.14, 0, 0);
+  for (const side of [-1, 1]) {
+    const fep = new THREE.BoxGeometry(0.024, 0.17, 0.34, 1, 5, 6);
+    addPart(fep, side * 0.81, -0.07, 2.08);
+  }
+
+  // Wheels (4)
+  const wheelSpecs = [
+    { x: -0.74, y: -0.155, z:  1.35, rx: 0, ry: 0, front: true  },
+    { x:  0.74, y: -0.155, z:  1.35, rx: 0, ry: 0, front: true  },
+    { x: -0.76, y: -0.145, z: -1.32, rx: 0, ry: 0, front: false },
+    { x:  0.76, y: -0.145, z: -1.32, rx: 0, ry: 0, front: false },
+  ];
+  wheelSpecs.forEach(w => {
+    const r = w.front ? 0.215 : 0.245;
+    const wd = w.front ? 0.29 : 0.37;
+    const wGeo = new THREE.CylinderGeometry(r, r, wd, 22, 2);
+    addPart(wGeo, w.x, w.y, w.z, 0, 0, Math.PI/2);
+    // Wheel hub
+    const hubGeo = new THREE.CylinderGeometry(0.06, 0.06, wd * 1.05, 6, 1);
+    addPart(hubGeo, w.x, w.y, w.z, 0, 0, Math.PI/2);
+    // Tyre sidewall detail
+    const sidewallGeo = new THREE.TorusGeometry(r - 0.03, 0.025, 8, 22);
+    addPart(sidewallGeo, w.x + (w.x < 0 ? -wd*0.5 : wd*0.5), w.y, w.z, Math.PI/2, 0, 0);
+  });
+
+  // Suspension wishbones (simplified rods)
+  const wishbonePositions = [
+    { x1: 0.36, x2: 0.72, y: -0.05, z: 1.35, fy: 0 },
+    { x1: 0.36, x2: 0.72, y:  0.08, z: 1.35, fy: 0 },
+    { x1: 0.36, x2: 0.76, y: -0.05, z:-1.32, fy: 0 },
+    { x1: 0.36, x2: 0.76, y:  0.08, z:-1.32, fy: 0 },
+  ];
+  wishbonePositions.forEach(wb => {
+    for (const side of [-1, 1]) {
+      const dx = (wb.x2 - wb.x1) * side;
+      const startX = wb.x1 * side, endX = wb.x2 * side;
+      const midX = (startX + endX) / 2;
+      const len = Math.abs(endX - startX);
+      const rod = new THREE.CylinderGeometry(0.008, 0.008, len, 4, 1);
+      addPart(rod, midX, wb.y, wb.z, 0, 0, Math.PI/2);
+    }
+  });
+
+  return mergeGeoArray(parts);
+}
+
+function taperGeo(geo, alongAxis, startFrac, endScale, tapeAxis) {
+  const pos = geo.attributes.position;
+  const bb = new THREE.Box3().setFromBufferAttribute(pos);
+  const range = bb.max[alongAxis] - bb.min[alongAxis];
+  const centre = (bb.max[alongAxis] + bb.min[alongAxis]) / 2;
+  for (let i = 0; i < pos.count; i++) {
+    const v = pos[`get${alongAxis.toUpperCase()}`](i);
+    const norm = (v - centre) / (range / 2); // -1 to 1
+    if (norm > startFrac * 2 - 1) {
+      const t = (norm - (startFrac * 2 - 1)) / (1 - (startFrac * 2 - 1));
+      const scale = 1 - t * (1 - endScale);
+      pos[`set${tapeAxis.toUpperCase()}`](i, pos[`get${tapeAxis.toUpperCase()}`](i) * scale);
+    }
+  }
+  pos.needsUpdate = true;
+}
+
+function taperCyl(geo) {
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i);
+    const t = Math.max(0.08, (y + 0.5));
+    pos.setX(i, pos.getX(i) * t);
+    pos.setZ(i, pos.getZ(i) * t);
+  }
+  pos.needsUpdate = true;
+}
+
+function mergeGeoArray(geos) {
+  let totalVerts = 0;
+  const processed = [];
+  geos.forEach(g => {
+    let geo = g;
+    if (geo.index) {
+      // Expand to non-indexed
+      const idxArr = geo.index.array;
+      const posArr = geo.attributes.position.array;
+      const norArr = geo.attributes.normal ? geo.attributes.normal.array : null;
+      const newPos = new Float32Array(idxArr.length * 3);
+      const newNor = norArr ? new Float32Array(idxArr.length * 3) : null;
+      for (let i = 0; i < idxArr.length; i++) {
+        const v = idxArr[i];
+        newPos[i*3]   = posArr[v*3];
+        newPos[i*3+1] = posArr[v*3+1];
+        newPos[i*3+2] = posArr[v*3+2];
+        if (newNor) {
+          newNor[i*3]   = norArr[v*3];
+          newNor[i*3+1] = norArr[v*3+1];
+          newNor[i*3+2] = norArr[v*3+2];
+        }
+      }
+      const ng = new THREE.BufferGeometry();
+      ng.setAttribute('position', new THREE.BufferAttribute(newPos, 3));
+      if (newNor) ng.setAttribute('normal', new THREE.BufferAttribute(newNor, 3));
+      geo = ng;
+    }
+    processed.push(geo);
+    totalVerts += geo.attributes.position.count;
+  });
+
+  const mergedPos = new Float32Array(totalVerts * 3);
+  let offset = 0;
+  processed.forEach(g => {
+    const arr = g.attributes.position.array;
+    mergedPos.set(arr, offset);
+    offset += arr.length;
+  });
+
+  const merged = new THREE.BufferGeometry();
+  merged.setAttribute('position', new THREE.BufferAttribute(mergedPos, 3));
+  merged.computeVertexNormals();
+  return merged;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LOAD GEOMETRY INTO SCENE
+// ─────────────────────────────────────────────────────────────────────────────
+function loadGeometry(geo, name, source) {
+  // Clean up previous
+  if (mainMesh) { scene.remove(mainMesh); mainMesh = null; }
+  if (wssArrowGroup) { scene.remove(wssArrowGroup); wssArrowGroup = null; }
+  if (wireframeOverlay) { scene.remove(wireframeOverlay); wireframeOverlay = null; }
+
+  geo.computeVertexNormals();
+  geo.computeBoundingBox();
+
+  // Centre
+  const centre = new THREE.Vector3();
+  geo.boundingBox.getCenter(centre);
+  geo.translate(-centre.x, -centre.y, -centre.z);
+  geo.computeBoundingBox();
+
+  // Normalise scale to ~4 units
+  const size = new THREE.Vector3();
+  geo.boundingBox.getSize(size);
+  const maxDim = Math.max(size.x, size.y, size.z);
+  const targetSize = 4.5;
+  if (maxDim > 0) {
+    const s = targetSize / maxDim;
+    geo.scale(s, s, s);
+  }
+  geo.computeBoundingBox();
+  geo.computeVertexNormals();
+
+  currentGeo = geo;
+  meshName = name;
+
+  const mat = new THREE.MeshPhongMaterial({
+    color: 0x1c2230,
+    specular: 0x00aacc,
+    shininess: 55,
+    vertexColors: false,
+    side: THREE.DoubleSide,
+  });
+
+  mainMesh = new THREE.Mesh(geo, mat);
+  mainMesh.castShadow = true;
+  mainMesh.receiveShadow = true;
+  scene.add(mainMesh);
+
+  // Subtle wireframe overlay
+  wireframeOverlay = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x2a3040, wireframe: true, transparent: true, opacity: 0.07 }));
+  scene.add(wireframeOverlay);
+
+  const verts = geo.attributes.position.count;
+  const faces = geo.index ? geo.index.count / 3 : verts / 3;
+  document.getElementById('vertCount').textContent = verts.toLocaleString();
+  document.getElementById('faceCount').textContent = Math.round(faces).toLocaleString();
+  document.getElementById('meshType').textContent = 'Triangular';
+  document.getElementById('meshSource').textContent = source;
+
+  orbit.radius = 8;
+  orbit.theta = 0.55;
+  orbit.phi = 1.05;
+  orbit.target.set(0, 0.2, 0);
+
+  document.getElementById('viewportOverlay').classList.add('hidden');
+  document.getElementById('runBtn').disabled = false;
+  document.getElementById('chipMode').textContent = name;
+  document.getElementById('chipStatus').textContent = 'Ready for inference';
+  document.getElementById('colorbar').classList.remove('visible');
+  document.getElementById('fileStatus').textContent = `✓ ${name} loaded`;
+  document.getElementById('fileStatus').className = 'file-status ok';
+
+  // Reset stats
+  document.getElementById('cdVal').textContent = '—';
+  document.getElementById('clVal').textContent = '—';
+  document.getElementById('cdVal').className = 'stat-value cd placeholder';
+  document.getElementById('clVal').className = 'stat-value cl placeholder';
+  document.getElementById('ldVal').textContent = '—';
+  document.getElementById('cpRangeVal').textContent = '—';
+  document.getElementById('peakWSSVal').textContent = '—';
+  document.getElementById('inferTimeVal').textContent = '—';
+  document.getElementById('cdDelta').textContent = '';
+  document.getElementById('clDelta').textContent = '';
+  document.getElementById('cdCard').classList.remove('loaded');
+  document.getElementById('clCard').classList.remove('loaded');
+  document.getElementById('downloadBtn').classList.remove('visible');
+
+  inferenceComplete = false;
+  predictions = null;
+
+  resetVizButtons();
+  showNotif(`Loaded: ${name}`, 'success');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DEMO MESH
+// ─────────────────────────────────────────────────────────────────────────────
+function loadDemoMesh() {
+  isDemo = true;
+  showNotif('Building F1 mesh…', '');
+  setTimeout(() => {
+    const geo = buildDemoF1Geometry();
+    loadGeometry(geo, 'Demo F1 Car', 'Procedural');
+  }, 50);
+}
+
+document.getElementById('loadDemoBtn').addEventListener('click', loadDemoMesh);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FILE UPLOAD
+// ─────────────────────────────────────────────────────────────────────────────
+const uploadZone = document.getElementById('uploadZone');
+const fileInput  = document.getElementById('fileInput');
+
+uploadZone.addEventListener('dragover',  (e) => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', ()  => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  uploadZone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) handleFile(f);
+});
+
+fileInput.addEventListener('change', (e) => {
+  if (e.target.files[0]) handleFile(e.target.files[0]);
+  e.target.value = ''; // allow re-upload of same file
+});
+
+function handleFile(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (!['obj', 'stl'].includes(ext)) {
+    document.getElementById('fileStatus').textContent = '⚠ Unsupported format — use OBJ or STL';
+    document.getElementById('fileStatus').className = 'file-status err';
+    return;
+  }
+
+  document.getElementById('fileStatus').textContent = 'Parsing…';
+  document.getElementById('fileStatus').className = 'file-status';
+
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      let geo;
+      if (ext === 'obj') {
+        geo = parseOBJ(ev.target.result);
+      } else {
+        geo = parseSTL(ev.target.result);
+      }
+      isDemo = false;
+      loadGeometry(geo, file.name, 'Uploaded OBJ');
+    } catch(err) {
+      document.getElementById('fileStatus').textContent = '⚠ Parse failed — check file format';
+      document.getElementById('fileStatus').className = 'file-status err';
+      console.error('Parse error:', err);
+    }
+  };
+
+  if (ext === 'stl') reader.readAsArrayBuffer(file);
+  else reader.readAsText(file);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OBJ PARSER
+// ─────────────────────────────────────────────────────────────────────────────
+function parseOBJ(text) {
+  const verts = [], uvs = [], faces = [];
+  const lines = text.split('\n');
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line || line[0] === '#') continue;
+    const parts = line.split(/\s+/);
+    if (parts[0] === 'v') {
+      verts.push(parseFloat(parts[1]), parseFloat(parts[2]), parseFloat(parts[3]));
+    } else if (parts[0] === 'f') {
+      const idx = parts.slice(1).map(p => parseInt(p.split('/')[0]) - 1);
+      // Triangulate (fan)
+      for (let i = 1; i < idx.length - 1; i++) {
+        faces.push(idx[0], idx[i], idx[i+1]);
+      }
+    }
+  }
+  if (verts.length === 0) throw new Error('No vertices found in OBJ');
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
+  geo.setIndex(faces);
+  return geo;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STL PARSER (binary + ASCII)
+// ─────────────────────────────────────────────────────────────────────────────
+function parseSTL(buffer) {
+  // Try binary
+  try {
+    const dv = new DataView(buffer);
+    const numTris = dv.getUint32(80, true);
+    if (numTris > 0 && 84 + numTris * 50 === buffer.byteLength) {
+      const positions = new Float32Array(numTris * 9);
+      let o = 84;
+      for (let i = 0; i < numTris; i++) {
+        o += 12; // skip normal
+        for (let j = 0; j < 3; j++) {
+          positions[i*9+j*3]   = dv.getFloat32(o, true); o += 4;
+          positions[i*9+j*3+1] = dv.getFloat32(o, true); o += 4;
+          positions[i*9+j*3+2] = dv.getFloat32(o, true); o += 4;
+        }
+        o += 2; // attribute byte count
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      return geo;
+    }
+  } catch(e) {}
+
+  // ASCII fallback
+  const text = new TextDecoder().decode(buffer);
+  const positions = [];
+  for (const line of text.split('\n')) {
+    const p = line.trim().split(/\s+/);
+    if (p[0] === 'vertex') {
+      positions.push(parseFloat(p[1]), parseFloat(p[2]), parseFloat(p[3]));
+    }
+  }
+  if (positions.length === 0) throw new Error('No vertices found in STL');
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+  return geo;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INFERENCE PIPELINE
+// ─────────────────────────────────────────────────────────────────────────────
+const stepIds = ['step0','step1','step2','step3','step4'];
+const stepPcts = [0, 18, 42, 68, 88];
+
+async function runInference() {
+  if (!currentGeo) return;
+  const btn = document.getElementById('runBtn');
+  btn.disabled = true;
+  document.getElementById('runBtnText').textContent = 'Running…';
+
+  const prog = document.getElementById('progressContainer');
+  prog.classList.add('active');
+  document.getElementById('progressBarFill').style.width = '0%';
+  stepIds.forEach(id => document.getElementById(id).classList.remove('active','done'));
+
+  const inferStart = performance.now();
+
+  for (let i = 0; i < stepIds.length; i++) {
+    const el = document.getElementById(stepIds[i]);
+    el.classList.add('active');
+    document.getElementById('progressBarFill').style.width = stepPcts[i] + '%';
+    await sleep(480 + Math.random() * 220);
+    el.classList.remove('active');
+    el.classList.add('done');
+  }
+
+  document.getElementById('progressBarFill').style.width = '100%';
+  await sleep(180);
+
+  predictions = generatePredictions(currentGeo);
+  inferenceComplete = true;
+
+  const inferTime = ((performance.now() - inferStart) / 1000).toFixed(2);
+
+  // Apply Cp colours
+  applyCurrentViz();
+  buildWSSArrows(currentGeo, predictions);
+
+  // Update stat cards
+  const cd = predictions.cd, cl = predictions.cl;
+  const cdEl = document.getElementById('cdVal');
+  const clEl = document.getElementById('clVal');
+  cdEl.textContent = cd.toFixed(3);
+  clEl.textContent = cl.toFixed(3);
+  cdEl.className = 'stat-value cd';
+  clEl.className = 'stat-value cl';
+
+  const ld = Math.abs(cl / cd).toFixed(2);
+  document.getElementById('ldVal').textContent = ld;
+  document.getElementById('cpRangeVal').textContent = `${predictions.cpMin.toFixed(2)} → ${predictions.cpMax.toFixed(2)}`;
+  document.getElementById('peakWSSVal').textContent = predictions.wssMax.toFixed(3) + ' Pa';
+  document.getElementById('inferTimeVal').textContent = inferTime + ' s';
+
+  // Baseline deltas (typical F1 car reference)
+  const cdRef = 0.82, clRef = -2.35;
+  const cdDelta = cd - cdRef, clDelta = cl - clRef;
+  const cdDEl = document.getElementById('cdDelta');
+  const clDEl = document.getElementById('clDelta');
+  cdDEl.textContent = `${cdDelta >= 0 ? '+' : ''}${cdDelta.toFixed(3)} vs reference`;
+  cdDEl.className = 'stat-delta ' + (cdDelta < 0 ? 'better' : 'worse');
+  clDEl.textContent = `${clDelta >= 0 ? '+' : ''}${clDelta.toFixed(3)} vs reference`;
+  clDEl.className = 'stat-delta ' + (clDelta < 0 ? 'better' : 'worse');
+
+  document.getElementById('cdCard').classList.add('loaded');
+  document.getElementById('clCard').classList.add('loaded');
+  document.getElementById('downloadBtn').classList.add('visible');
+  document.getElementById('chipStatus').textContent = `Inference done (${inferTime}s)`;
+
+  btn.disabled = false;
+  document.getElementById('runBtnText').textContent = 'Re-run Inference →';
+
+  showNotif(`✓ Inference complete · Cd: ${cd.toFixed(3)}  Cl: ${cl.toFixed(3)}`, 'success');
+
+  await sleep(700);
+  prog.classList.remove('active');
+}
+
+document.getElementById('runBtn').addEventListener('click', runInference);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VIZ MODE
+// ─────────────────────────────────────────────────────────────────────────────
+function setVizMode(mode) {
+  vizMode = mode;
+  resetVizButtons();
+  document.getElementById('vizCp').classList.toggle('active', mode === 'cp');
+  document.getElementById('vizWssMag').classList.toggle('active', mode === 'wss_mag');
+  document.getElementById('vizWssDir').classList.toggle('active', mode === 'wss_dir');
+
+  if (inferenceComplete) applyCurrentViz();
+}
+
+function resetVizButtons() {
+  ['vizCp','vizWssMag','vizWssDir'].forEach(id => document.getElementById(id).classList.remove('active'));
+  if (!inferenceComplete) document.getElementById('vizCp').classList.add('active');
+  else {
+    // Keep the active one
+    const map = { cp: 'vizCp', wss_mag: 'vizWssMag', wss_dir: 'vizWssDir' };
+    document.getElementById(map[vizMode]).classList.add('active');
+  }
+}
+
+function applyCurrentViz() {
+  if (!currentGeo || !predictions) return;
+  const { minV, maxV } = applyVertexColours(currentGeo, predictions);
+
+  if (mainMesh) {
+    mainMesh.material.vertexColors = true;
+    mainMesh.material.color.set(0xffffff);
+    mainMesh.material.needsUpdate = true;
+  }
+
+  updateColorbar(minV, maxV);
+  const modeNames = { cp: 'Pressure Coefficient (Cp)', wss_mag: 'WSS Magnitude', wss_dir: 'WSS Direction' };
+  document.getElementById('chipMode').textContent = modeNames[vizMode];
+}
+
+function updateColorbar(minV, maxV) {
+  document.getElementById('colorbar').classList.add('visible');
+
+  const gradients = {
+    cp:      'linear-gradient(to bottom, #ff2020 0%, #ff8060 25%, #ffffff 50%, #6090ff 75%, #0022ff 100%)',
+    wss_mag: 'linear-gradient(to bottom, #ff0000 0%, #ffff00 33%, #00ffff 66%, #000033 100%)',
+    wss_dir: 'linear-gradient(to bottom, hsl(330,85%,55%), hsl(240,85%,55%), hsl(150,85%,55%), hsl(60,85%,55%), hsl(0,85%,55%))',
+  };
+  const titles = { cp: 'Cp', wss_mag: 'WSS |τ|', wss_dir: 'Flow θ' };
+  const units  = { cp: 'Cp [—]', wss_mag: 'WSS [Pa]', wss_dir: 'Direction' };
+
+  document.getElementById('colorbarGradient').style.background = gradients[vizMode];
+  document.getElementById('colorbarTitle').textContent = titles[vizMode];
+  document.getElementById('colorbarUnit').textContent  = units[vizMode];
+  document.getElementById('cbMax').textContent = maxV.toFixed(2);
+  document.getElementById('cbMin').textContent = minV.toFixed(2);
+
+  // Update the 3 middle labels
+  const labels = document.getElementById('colorbarLabels').querySelectorAll('span');
+  if (labels.length === 5) {
+    const mid = (minV + maxV) / 2;
+    const q1  = (minV + mid) / 2;
+    const q3  = (mid + maxV) / 2;
+    labels[1].textContent = q3.toFixed(2);
+    labels[2].textContent = mid.toFixed(2);
+    labels[3].textContent = q1.toFixed(2);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WSS ARROWS TOGGLE
+// ─────────────────────────────────────────────────────────────────────────────
+function toggleWSSArrows() {
+  if (!inferenceComplete) {
+    showNotif('Run inference first to generate WSS predictions.', 'error');
+    return;
+  }
+  showWSSArrows = !showWSSArrows;
+  document.getElementById('wssArrowToggle').classList.toggle('on', showWSSArrows);
+  if (wssArrowGroup) {
+    if (showWSSArrows) scene.add(wssArrowGroup);
+    else scene.remove(wssArrowGroup);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WIREFRAME + AUTO-ROTATE
+// ─────────────────────────────────────────────────────────────────────────────
+function toggleWireframe() {
+  wireframeOn = !wireframeOn;
+  document.getElementById('wireframeBtn').classList.toggle('active', wireframeOn);
+  if (wireframeOverlay) {
+    wireframeOverlay.material.opacity = wireframeOn ? 0.45 : 0.07;
+  }
+}
+
+function toggleAutoRotate() {
+  autoRotate = !autoRotate;
+  document.getElementById('autoRotateBtn').classList.toggle('active', autoRotate);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CAMERA PRESETS
+// ─────────────────────────────────────────────────────────────────────────────
+function resetCamera() {
+  orbit.theta  = 0.55;
+  orbit.phi    = 1.05;
+  orbit.radius = 8;
+  orbit.target.set(0, 0.2, 0);
+}
+
+function setCamPreset(view) {
+  orbit.radius = 8;
+  orbit.target.set(0, 0, 0);
+  const presets = {
+    top:   { phi: 0.04, theta: 0 },
+    side:  { phi: Math.PI/2, theta: Math.PI/2 },
+    front: { phi: Math.PI/2, theta: 0 },
+    rear:  { phi: Math.PI/2, theta: Math.PI },
+  };
+  const p = presets[view];
+  if (p) { orbit.phi = p.phi; orbit.theta = p.theta; }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CSV DOWNLOAD
+// ─────────────────────────────────────────────────────────────────────────────
+function downloadResults() {
+  if (!predictions || !currentGeo) return;
+  const pos = currentGeo.attributes.position;
+  const n = pos.count;
+
+  const rows = [
+    '# F1AeroGEM Predictions Export',
+    `# Mesh: ${meshName}`,
+    `# Model: GEM-CNN v2.1`,
+    `# Cd: ${predictions.cd.toFixed(4)}, Cl: ${predictions.cl.toFixed(4)}`,
+    `# Generated: ${new Date().toISOString()}`,
+    'vertex_id,x,y,z,Cp,WSS_x,WSS_y,WSS_z,WSS_mag',
+  ];
+
+  for (let i = 0; i < n; i++) {
+    const x  = pos.getX(i).toFixed(5);
+    const y  = pos.getY(i).toFixed(5);
+    const z  = pos.getZ(i).toFixed(5);
+    const cp = predictions.cp[i].toFixed(5);
+    const wx = predictions.wssX[i].toFixed(5);
+    const wy = predictions.wssY[i].toFixed(5);
+    const wz = predictions.wssZ[i].toFixed(5);
+    const wm = predictions.wssMag[i].toFixed(5);
+    rows.push(`${i},${x},${y},${z},${cp},${wx},${wy},${wz},${wm}`);
+  }
+
+  const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'f1aerogem_predictions.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  showNotif('CSV downloaded successfully.', 'success');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NOTIFICATION TOAST
+// ─────────────────────────────────────────────────────────────────────────────
+let notifTimer = null;
+function showNotif(msg, type='') {
+  const el = document.getElementById('notif');
+  el.textContent = msg;
+  el.className = 'notif show ' + type;
+  clearTimeout(notifTimer);
+  notifTimer = setTimeout(() => el.classList.remove('show'), 3800);
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONSOLE BRANDING
+// ─────────────────────────────────────────────────────────────────────────────
+console.log('%cF1AeroGEM', 'color:#00d4ff;font-size:22px;font-weight:800;letter-spacing:-1px');
+console.log('%cGauge Equivariant Mesh CNN — Aerodynamic Field Prediction', 'color:#8b949e;font-size:12px');
+console.log('%c> loadDemoMesh()  — load the F1 demo car', 'color:#484f58;font-size:11px');
+console.log('%c> runInference()  — run GEM-CNN predictions', 'color:#484f58;font-size:11px');
+</script>
+</body>
+</html>
