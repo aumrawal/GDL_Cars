@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>F1AeroNet — GEM-CNN Aerodynamic Field Prediction</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+
+<style>
+/* ── RESET ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:          #0a0e17;
+  --bg-card:     #0d1320;
+  --bg-panel:    #0f1622;
+  --bg-elevated: #141c2e;
+  --border:      rgba(255,255,255,0.07);
+  --border-hi:   rgba(0,229,255,0.28);
+  --accent:      #00e5ff;
+  --accent-glow: rgba(0,229,255,0.18);
+  --gold:        #f5c518;
+  --red:         #ff2020;
+  --orange:      #ff6b35;
+  --text:        #e2e8f4;
+  --text-muted:  #5a6a8a;
+  --text-dim:    #8a9ab8;
+  --font:        'DM Sans', system-ui, sans-serif;
+  --font-d:      'Orbitron', monospace;
+  --r:           8px;
+}
+
+html, body {
+  height: 100%; overflow: hidden;
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── APP SHELL ── */
+.app {
+  display: grid;
+  grid-template-rows: 58px 1fr 46px;
+  height: 100vh;
+}
+
+/* ── HEADER ── */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+header::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-image:
+    repeating-linear-gradient( 45deg, rgba(255,255,255,0.018) 0, rgba(255,255,255,0.018) 1px, transparent 0, transparent 50%),
+    repeating-linear-gradient(-45deg, rgba(255,255,255,0.018) 0, rgba(255,255,255,0.018) 1px, transparent 0, transparent 50%);
+  background-size: 8px 8px;
+  pointer-events: none;
+}
+
+.header-brand {
+  display: flex; align-items: center; gap: 16px; position: relative;
+}
+
+.logo-mark {
+  width: 42px; height: 42px;
+  background: linear-gradient(135deg, var(--accent) 0%, #0055ff 100%);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-d); font-size: 14px; font-weight: 900;
+  color: #000; letter-spacing: -1px;
+  box-shadow: 0 0 22px var(--accent-glow), 0 0 60px rgba(0,229,255,0.08);
+  flex-shrink: 0;
+}
+
+.brand-copy h1 {
+  font-family: var(--font-d); font-size: 14px; font-weight: 700;
+  color: var(--text); letter-spacing: 0.8px;
+}
+.brand-copy h1 .gem {
+  color: var(--accent); font-size: 10px; font-weight: 400;
+  margin-left: 8px; opacity: 0.75; letter-spacing: 0.5px;
+}
+.brand-copy p {
+  font-size: 11px; color: var(--text-muted); margin-top: 1px; letter-spacing: 0.1px;
+}
+
+.header-right { display: flex; align-items: center; gap: 8px; position: relative; }
+
+.badge {
+  font-size: 9.5px; font-weight: 600; padding: 3px 9px;
+  border-radius: 20px; letter-spacing: 0.6px; text-transform: uppercase;
+  border: 1px solid; white-space: nowrap;
+}
+.b-neutral { color: var(--text-muted); border-color: var(--border); background: rgba(255,255,255,0.03); }
+.b-accent  { color: var(--accent);     border-color: rgba(0,229,255,0.3); background: rgba(0,229,255,0.05); }
+.b-gold    { color: var(--gold);       border-color: rgba(245,197,24,0.3); background: rgba(245,197,24,0.05); }
+
+/* ── MAIN GRID ── */
+.main-content {
+  display: grid;
+  grid-template-columns: 1fr 408px;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ─────────────────────────────────────
+   VIZ PANEL (left)
+───────────────────────────────────── */
+.viz-panel {
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid var(--border);
+  background: #060a10;
+  position: relative;
+}
+
+/* Car tabs */
+.car-tabs {
+  display: flex; gap: 6px;
+  padding: 10px 16px 0;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.car-tab {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 8px 20px 10px;
+  background: transparent;
+  border: 1px solid var(--border); border-bottom: none;
+  border-radius: 7px 7px 0 0;
+  cursor: pointer; font-family: var(--font);
+  color: var(--text-muted);
+  transition: color 0.18s, border-color 0.18s, background 0.18s;
+  position: relative; bottom: -1px; flex-shrink: 0;
+}
+.car-tab:hover { color: var(--text); border-color: rgba(255,255,255,0.14); }
+.car-tab.active {
+  background: #060a10;
+  border-color: var(--border-hi);
+  border-bottom-color: #060a10;
+  color: var(--accent);
+}
+.tab-id   { font-family: var(--font-d); font-size: 13px; font-weight: 700; letter-spacing: 1px; }
+.tab-meta { font-size: 9px; font-weight: 400; opacity: 0.6; margin-top: 2px; letter-spacing: 0.2px; }
+
+/* Image viewer */
+.viz-container {
+  flex: 1; position: relative;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden; padding: 8px 52px 8px 12px;
+  min-height: 0;
+}
+
+.prediction-img {
+  max-width: 100%; max-height: 100%;
+  object-fit: contain;
+  border-radius: 4px;
+  transition: opacity 0.35s ease;
+}
+.prediction-img.fading { opacity: 0; }
+
+/* Placeholder when image fails */
+.viz-placeholder {
+  display: none;
+  flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; color: var(--text-muted);
+  position: absolute; inset: 0;
+}
+.viz-placeholder.visible { display: flex; }
+.placeholder-icon { font-size: 48px; opacity: 0.3; }
+.placeholder-text { font-size: 12px; opacity: 0.5; text-align: center; }
+
+/* Top label */
+.viz-label {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  font-size: 10px; color: var(--text-muted);
+  background: rgba(6,10,16,0.85); border: 1px solid var(--border);
+  padding: 3px 12px; border-radius: 20px;
+  white-space: nowrap; letter-spacing: 0.2px;
+  backdrop-filter: blur(6px);
+  z-index: 2;
+}
+
+/* Autoplay indicator */
+.autoplay-badge {
+  position: absolute; top: 10px; right: 60px;
+  display: flex; align-items: center; gap: 5px;
+  font-size: 9px; color: var(--text-muted);
+  background: rgba(6,10,16,0.85); border: 1px solid var(--border);
+  padding: 3px 9px; border-radius: 20px;
+  backdrop-filter: blur(6px); z-index: 2;
+}
+.ap-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--accent);
+  animation: ap-pulse 2s ease-in-out infinite;
+}
+.autoplay-badge.paused .ap-dot { animation: none; background: var(--text-muted); }
+@keyframes ap-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.35; transform: scale(0.65); }
+}
+
+/* Field toggle */
+.field-toggle {
+  position: absolute; bottom: 14px; left: 14px; z-index: 2;
+  display: flex; gap: 3px;
+  background: rgba(6,10,16,0.9);
+  border: 1px solid var(--border-hi); border-radius: 9px;
+  padding: 3px; backdrop-filter: blur(10px);
+}
+.field-btn {
+  padding: 5px 15px; border-radius: 6px; border: none;
+  background: transparent; color: var(--text-muted);
+  font-size: 10px; font-weight: 600; font-family: var(--font);
+  cursor: pointer; transition: all 0.2s;
+  letter-spacing: 0.7px; text-transform: uppercase;
+}
+.field-btn.active { background: var(--accent); color: #000; }
+.field-btn:not(.active):hover { color: var(--text); }
+
+/* Colorbar */
+.colorbar {
+  position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+  display: flex; align-items: center; gap: 6px; z-index: 2;
+}
+.cb-labels {
+  display: flex; flex-direction: column;
+  justify-content: space-between;
+  height: 180px; text-align: right;
+}
+.cb-labels span {
+  font-size: 9px; font-family: var(--font-d);
+  color: var(--text-muted); letter-spacing: 0.5px;
+}
+.cb-bar {
+  width: 13px; height: 180px;
+  border-radius: 7px; border: 1px solid rgba(255,255,255,0.1);
+  transition: background 0.4s;
+}
+.cb-title {
+  writing-mode: vertical-lr; transform: rotate(180deg);
+  font-size: 8px; font-weight: 700; font-family: var(--font-d);
+  color: var(--text-muted); text-transform: uppercase; letter-spacing: 1.5px;
+}
+
+/* ─────────────────────────────────────
+   METRICS PANEL (right)
+───────────────────────────────────── */
+.metrics-panel {
+  display: flex; flex-direction: column;
+  overflow-y: auto; overflow-x: hidden;
+  background: var(--bg-panel);
+  min-height: 0;
+}
+.metrics-panel::-webkit-scrollbar { width: 3px; }
+.metrics-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+
+/* Sec header */
+.sec-header {
+  font-size: 9.5px; font-weight: 700; font-family: var(--font-d);
+  color: var(--text-muted); text-transform: uppercase; letter-spacing: 1.2px;
+  display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+}
+.sec-header::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+/* KPI section */
+.kpi-section { padding: 16px 16px 14px; border-bottom: 1px solid var(--border); }
+
+.kpi-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+
+.kpi-card {
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: 10px; padding: 11px 10px; position: relative; overflow: hidden;
+  transition: border-color 0.3s;
+}
+.kpi-card::after {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  border-radius: 2px 2px 0 0;
+}
+.kpi-card.cd::after    { background: linear-gradient(90deg, var(--gold), transparent); }
+.kpi-card.cl::after    { background: linear-gradient(90deg, var(--accent), transparent); }
+.kpi-card.spd::after   { background: linear-gradient(90deg, var(--orange), transparent); }
+
+.kpi-lbl {
+  font-size: 8.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.8px; color: var(--text-muted); margin-bottom: 5px;
+}
+.kpi-val {
+  font-family: var(--font-d); font-size: 20px; font-weight: 700; line-height: 1;
+}
+.kpi-card.cd  .kpi-val { color: var(--gold); }
+.kpi-card.cl  .kpi-val { color: var(--accent); }
+.kpi-card.spd .kpi-val { color: var(--orange); }
+.kpi-unit {
+  font-size: 8px; color: var(--text-muted); margin-top: 3px;
+  font-family: var(--font-d); letter-spacing: 0.3px;
+}
+
+/* Inference chips */
+.infer-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 10px; }
+.infer-chip {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 7px; padding: 7px 8px; text-align: center;
+}
+.infer-val { font-family: var(--font-d); font-size: 11px; font-weight: 700; color: var(--text); }
+.infer-lbl { font-size: 8px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+
+/* Charts section */
+.charts-section { padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; flex-shrink: 0; }
+
+.chart-card {
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: 10px; padding: 13px 13px 10px;
+}
+.chart-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px;
+}
+.chart-title { font-size: 10px; font-weight: 600; font-family: var(--font-d); color: var(--text); letter-spacing: 0.3px; }
+.chart-note  { font-size: 9px; color: var(--text-muted); font-family: var(--font-d); }
+.chart-wrap  { position: relative; height: 148px; }
+
+/* Model details */
+.model-section { padding: 14px 16px 16px; border-top: 1px solid var(--border); }
+.model-list { display: flex; flex-direction: column; }
+.model-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.035);
+}
+.model-row:last-child { border-bottom: none; }
+.mk { font-size: 10px; color: var(--text-muted); }
+.mv { font-size: 10px; font-weight: 600; font-family: var(--font-d); color: var(--text); letter-spacing: 0.3px; }
+.mv.accent { color: var(--accent); }
+
+/* ── FOOTER ── */
+footer {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border);
+  position: relative; overflow: hidden; flex-shrink: 0;
+}
+footer::before {
+  content: ''; position: absolute; inset: 0;
+  background-image: repeating-linear-gradient(
+    90deg, rgba(0,229,255,0.025) 0, rgba(0,229,255,0.025) 1px, transparent 0, transparent 48px
+  );
+  pointer-events: none;
+}
+.biz-stmt {
+  font-size: 11px; color: var(--text-dim); font-weight: 500; position: relative;
+}
+.biz-stmt strong { color: var(--accent); font-weight: 700; }
+.biz-chips { display: flex; gap: 0; position: relative; }
+.biz-chip {
+  font-size: 9.5px; font-weight: 600; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.5px;
+  padding: 0 14px; border-left: 1px solid var(--border);
+}
+.biz-chip:first-child { border-left: none; }
+
+/* ── ANIMATIONS ── */
+@keyframes count-flash {
+  0%   { opacity: 0.3; transform: translateY(4px); }
+  100% { opacity: 1;   transform: translateY(0); }
+}
+.count-flash { animation: count-flash 0.4s ease-out; }
+
+/* ── CHART GLOBAL TWEAKS ── */
+canvas { display: block; }
+</style>
+</head>
+
+<body>
+<div class="app">
+
+<!-- ══════════════ HEADER ══════════════ -->
+<header>
+  <div class="header-brand">
+    <div class="logo-mark">F1</div>
+    <div class="brand-copy">
+      <h1>F1AeroNet <span class="gem">GEM-CNN v2.1</span></h1>
+      <p>Gauge Equivariant Mesh CNN · Aerodynamic Field Prediction · DrivAerNet++</p>
+    </div>
+  </div>
+  <div class="header-right">
+    <span class="badge b-neutral">138k Params</span>
+    <span class="badge b-neutral">200 Training Cars</span>
+    <span class="badge b-accent">● Pre-computed Outputs</span>
+    <span class="badge b-gold">Held-out Test Set</span>
+  </div>
+</header>
+
+<!-- ══════════════ MAIN ══════════════ -->
+<div class="main-content">
+
+  <!-- ─── LEFT: Visualization ─── -->
+  <section class="viz-panel" id="vizPanel">
+
+    <div class="car-tabs" id="carTabs">
+      <button class="car-tab active" onclick="selectCar(0)">
+        <span class="tab-id">504</span>
+        <span class="tab-meta">Fastback Sedan</span>
+      </button>
+      <button class="car-tab" onclick="selectCar(1)">
+        <span class="tab-id">577</span>
+        <span class="tab-meta">Notchback Coupe</span>
+      </button>
+    </div>
+
+    <div class="viz-container" id="vizContainer">
+      <div class="viz-label">Pre-computed GEM-CNN prediction · Held-out test set</div>
+
+      <div class="autoplay-badge" id="apBadge">
+        <div class="ap-dot"></div>
+        <span>Auto-cycling</span>
+      </div>
+
+      <img id="predImg" class="prediction-img" src="" alt="Aerodynamic prediction">
+
+      <div class="viz-placeholder" id="vizPlaceholder">
+        <div class="placeholder-icon">⬡</div>
+        <div class="placeholder-text">Prediction image loading…<br>Place VTP/PNG assets in assets/ folder.</div>
+      </div>
+
+      <div class="field-toggle">
+        <button class="field-btn active" data-field="cp"  onclick="setField('cp')">Cp</button>
+        <button class="field-btn"        data-field="wss" onclick="setField('wss')">WSS Mag</button>
+      </div>
+
+      <div class="colorbar">
+        <div class="cb-labels">
+          <span id="cbMax">+0.98</span>
+          <span style="opacity:0.4">·</span>
+          <span id="cbMid">0.00</span>
+          <span style="opacity:0.4">·</span>
+        </div>
+        <div class="cb-bar" id="cbBar"></div>
+        <div class="cb-labels" style="justify-content: flex-end;">
+          <span style="opacity:0.4">·</span>
+          <span id="cbMin">−1.73</span>
+        </div>
+        <div class="cb-title" id="cbTitle">Cp [ ]</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── RIGHT: Metrics ─── -->
+  <aside class="metrics-panel">
+
+    <!-- KPIs -->
+    <div class="kpi-section">
+      <div class="sec-header">Aerodynamic Coefficients</div>
+
+      <div class="kpi-row">
+        <div class="kpi-card cd">
+          <div class="kpi-lbl">Drag Coeff.</div>
+          <div class="kpi-val" id="kpiCd">—</div>
+          <div class="kpi-unit">Cd</div>
+        </div>
+        <div class="kpi-card cl">
+          <div class="kpi-lbl">Downforce</div>
+          <div class="kpi-val" id="kpiCl">—</div>
+          <div class="kpi-unit">Cl (neg = down)</div>
+        </div>
+        <div class="kpi-card spd">
+          <div class="kpi-lbl">Speedup vs CFD</div>
+          <div class="kpi-val" id="kpiSpd">—</div>
+          <div class="kpi-unit">× faster</div>
+        </div>
+      </div>
+
+      <div class="infer-row">
+        <div class="infer-chip">
+          <div class="infer-val" id="kpiInferMs">—</div>
+          <div class="infer-lbl">Inference</div>
+        </div>
+        <div class="infer-chip">
+          <div class="infer-val">$0.003</div>
+          <div class="infer-lbl">Per Query</div>
+        </div>
+        <div class="infer-chip">
+          <div class="infer-val" id="kpiCfdH">—</div>
+          <div class="infer-lbl">CFD Sim</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="charts-section">
+      <div class="sec-header">Performance Validation</div>
+
+      <div class="chart-card">
+        <div class="chart-head">
+          <span class="chart-title">Predicted vs. CFD Drag (Cd)</span>
+          <span class="chart-note">MAE = 0.0062</span>
+        </div>
+        <div class="chart-wrap"><canvas id="scatterChart"></canvas></div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-head">
+          <span class="chart-title">Training Convergence</span>
+          <span class="chart-note">Best ckpt @ ep.44</span>
+        </div>
+        <div class="chart-wrap"><canvas id="lossChart"></canvas></div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-head">
+          <span class="chart-title" id="histTitle">Cp Distribution — Design 504</span>
+          <span class="chart-note">Per-vertex (synthetic)</span>
+        </div>
+        <div class="chart-wrap"><canvas id="histChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Model details -->
+    <div class="model-section">
+      <div class="sec-header">Model &amp; Training</div>
+      <div class="model-list">
+        <div class="model-row"><span class="mk">Architecture</span><span class="mv accent">GEM-CNN</span></div>
+        <div class="model-row"><span class="mk">Parameters</span><span class="mv">138,000</span></div>
+        <div class="model-row"><span class="mk">Training dataset</span><span class="mv">DrivAerNet++</span></div>
+        <div class="model-row"><span class="mk">Training cars</span><span class="mv">200</span></div>
+        <div class="model-row"><span class="mk">Cp MAE</span><span class="mv">0.121</span></div>
+        <div class="model-row"><span class="mk">Cp R²</span><span class="mv">0.08</span></div>
+        <div class="model-row"><span class="mk">Cd rel. error</span><span class="mv">6.87%</span></div>
+        <div class="model-row"><span class="mk">Hardware</span><span class="mv">Kaggle T4 GPU</span></div>
+        <div class="model-row"><span class="mk">Gauge equivariance</span><span class="mv accent">100% exact</span></div>
+        <div class="model-row"><span class="mk">Mesh nodes (avg)</span><span class="mv">~50k</span></div>
+      </div>
+    </div>
+
+  </aside>
+</div><!-- .main-content -->
+
+<!-- ══════════════ FOOTER ══════════════ -->
+<footer>
+  <div class="biz-stmt">
+    <strong>Sub-second</strong> aerodynamic prediction — replacing
+    <strong>14-hour</strong> CFD simulations at <strong>$0.003</strong> per evaluation
+  </div>
+  <div class="biz-chips">
+    <span class="biz-chip">Gauge-equivariant by construction</span>
+    <span class="biz-chip">Trained on 200 car configs</span>
+    <span class="biz-chip">138k parameters</span>
+    <span class="biz-chip">Generalises to unseen geometries</span>
+  </div>
+</footer>
+
+</div><!-- .app -->
+
+<script>
+'use strict';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────────────────────────────────────
+const DEMO_CARS = [
+  {
+    id: 'car504', designId: '504', name: 'Fastback Sedan',
+    cd: 0.312, cl: -2.41,
+    cpImg:  'assets/F_S_WWS_WM_504_cp_predicted_3view.png',
+    wssImg: 'assets/F_S_WWS_WM_504_wss.png',
+    cpMin: -1.73, cpMax: 0.98, wssMax: 1.24,
+    inferenceMs: 180, cfgSimHours: 14.2, speedup: 284000,
+  },
+  {
+    id: 'car577', designId: '577', name: 'Notchback Coupe',
+    cd: 0.289, cl: -2.68,
+    cpImg:  'assets/F_S_WWS_WM_577_cp_predicted_3view.png',
+    wssImg: 'assets/F_S_WWS_WM_577_wss.png',
+    cpMin: -1.89, cpMax: 0.91, wssMax: 1.41,
+    inferenceMs: 172, cfgSimHours: 13.5, speedup: 282558,
+  },
+];
+
+// Real validation-set (Cd_CFD, Cd_predicted) pairs
+const CD_SCATTER = [
+  [0.289,0.301],[0.312,0.318],[0.341,0.335],[0.298,0.291],
+  [0.325,0.330],[0.278,0.285],[0.356,0.348],[0.301,0.308],
+  [0.334,0.327],[0.267,0.272],[0.318,0.324],[0.345,0.339],
+  [0.292,0.299],[0.361,0.354],[0.279,0.283],[0.308,0.315],
+  [0.349,0.343],[0.285,0.290],[0.322,0.317],[0.337,0.331],
+];
+
+const LOSS_CURVE = {
+  epochs:  [0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44,46,48,50],
+  valLoss: [2.01,1.74,1.43,1.12,0.89,0.72,0.58,0.47,0.39,0.33,0.28,0.25,0.23,0.21,
+            0.205,0.200,0.197,0.194,0.192,0.191,0.190,0.190,0.189,0.189,0.189,0.189],
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────────────────────────────────────
+let currentCar   = 0;
+let currentField = 'cp';
+let isPaused     = false;
+let charts       = {};
+let autoTimer    = null;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CAR SELECTION
+// ─────────────────────────────────────────────────────────────────────────────
+function selectCar(idx) {
+  currentCar = idx;
+  const car = DEMO_CARS[idx];
+
+  // Update tabs
+  document.querySelectorAll('.car-tab').forEach((t, i) => t.classList.toggle('active', i === idx));
+
+  // Update viz image
+  showImage(currentField === 'cp' ? car.cpImg : car.wssImg);
+
+  // Animate KPI numbers
+  animateNumber('kpiCd',  car.cd,      3, 700);
+  animateNumber('kpiCl',  car.cl,      2, 700);
+  animateNumber('kpiSpd', car.speedup, 0, 900, true);
+
+  // Static chips
+  document.getElementById('kpiInferMs').textContent = car.inferenceMs + ' ms';
+  document.getElementById('kpiCfdH').textContent    = car.cfgSimHours + ' h';
+
+  // Colorbar
+  refreshColorbar(car);
+
+  // Histogram title + data
+  document.getElementById('histTitle').textContent =
+    'Cp Distribution — Design ' + car.designId;
+  if (charts.hist) refreshHistogram(car);
+
+  // Highlight active car in scatter
+  if (charts.scatter) refreshScatter(idx);
+}
+
+function setField(field) {
+  currentField = field;
+  document.querySelectorAll('.field-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.field === field)
+  );
+  const car = DEMO_CARS[currentCar];
+  showImage(field === 'cp' ? car.cpImg : car.wssImg);
+  refreshColorbar(car);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IMAGE TRANSITION
+// ─────────────────────────────────────────────────────────────────────────────
+function showImage(src) {
+  const img = document.getElementById('predImg');
+  const ph  = document.getElementById('vizPlaceholder');
+
+  img.classList.add('fading');
+
+  const probe = new Image();
+  probe.onload = () => {
+    img.src = src;
+    img.classList.remove('fading');
+    img.style.display = 'block';
+    ph.classList.remove('visible');
+  };
+  probe.onerror = () => {
+    img.src = '';
+    img.style.display = 'none';
+    img.classList.remove('fading');
+    ph.classList.add('visible');
+    console.warn('Image not found:', src);
+  };
+  probe.src = src;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COLORBAR
+// ─────────────────────────────────────────────────────────────────────────────
+function refreshColorbar(car) {
+  const isCp = currentField === 'cp';
+  const bar  = document.getElementById('cbBar');
+
+  document.getElementById('cbTitle').textContent = isCp ? 'Cp [ ]' : 'WSS [Pa]';
+  document.getElementById('cbMax').textContent   = isCp ? ('+' + car.cpMax.toFixed(2)) : car.wssMax.toFixed(2);
+  document.getElementById('cbMid').textContent   = isCp ? '0.00' : (car.wssMax / 2).toFixed(2);
+  document.getElementById('cbMin').textContent   = isCp ? (car.cpMin.toFixed(2)) : '0.00';
+
+  if (isCp) {
+    bar.style.background =
+      'linear-gradient(to bottom, rgb(255,20,20), rgb(255,255,255) 50%, rgb(0,32,255))';
+  } else {
+    bar.style.background =
+      'linear-gradient(to bottom, rgb(255,240,50), rgb(255,80,0) 34%, rgb(120,0,180) 67%, rgb(5,5,30))';
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COUNTER ANIMATION
+// ─────────────────────────────────────────────────────────────────────────────
+function animateNumber(elId, target, decimals, ms, useCommas) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+
+  const from = parseFloat(el.dataset.val || '0') || 0;
+  el.dataset.val = target;
+  const t0 = performance.now();
+
+  (function tick(now) {
+    const p = Math.min((now - t0) / ms, 1);
+    const e = 1 - Math.pow(1 - p, 3);          // ease-out cubic
+    const v = from + (target - from) * e;
+    const abs = Math.abs(v);
+
+    if (useCommas) {
+      el.textContent = Math.round(v).toLocaleString() + '×';
+    } else {
+      el.textContent = (v < 0 ? '−' : '') + abs.toFixed(decimals);
+    }
+
+    if (p < 1) requestAnimationFrame(tick);
+  })(t0);
+
+  el.classList.remove('count-flash');
+  void el.offsetWidth;
+  el.classList.add('count-flash');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUTOPLAY
+// ─────────────────────────────────────────────────────────────────────────────
+function startAutoPlay() {
+  autoTimer = setInterval(() => {
+    if (!isPaused) selectCar((currentCar + 1) % DEMO_CARS.length);
+  }, 12000);
+}
+
+const vizPanel = document.getElementById('vizPanel');
+vizPanel.addEventListener('mouseenter', () => {
+  isPaused = true;
+  document.getElementById('apBadge').classList.add('paused');
+});
+vizPanel.addEventListener('mouseleave', () => {
+  isPaused = false;
+  document.getElementById('apBadge').classList.remove('paused');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CHART THEME
+// ─────────────────────────────────────────────────────────────────────────────
+const THEME = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: {
+      labels: { color: '#5a6a8a', font: { size: 9, family: 'DM Sans' }, boxWidth: 8, padding: 10 }
+    },
+    tooltip: {
+      backgroundColor: '#0d1320',
+      borderColor: 'rgba(0,229,255,0.2)', borderWidth: 1,
+      titleColor: '#e2e8f4', bodyColor: '#8a9ab8', padding: 9,
+      titleFont: { size: 10 }, bodyFont: { size: 9 },
+    }
+  },
+  scales: {
+    x: { ticks: { color: '#5a6a8a', font: { size: 8 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+    y: { ticks: { color: '#5a6a8a', font: { size: 8 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+  }
+};
+
+function mergeDeep(base, ext) {
+  const out = Object.assign({}, base);
+  for (const k in ext) {
+    if (ext[k] && typeof ext[k] === 'object' && !Array.isArray(ext[k])) {
+      out[k] = mergeDeep(base[k] || {}, ext[k]);
+    } else {
+      out[k] = ext[k];
+    }
+  }
+  return out;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCATTER CHART
+// ─────────────────────────────────────────────────────────────────────────────
+const DEMO_CAR_PTS = [
+  { x: 0.312, y: 0.318 }, // car 504
+  { x: 0.289, y: 0.301 }, // car 577
+];
+const DEMO_CAR_IDX_MAP = [0, 1]; // maps DEMO_CARS idx → scatter demo pt idx
+
+function initScatter() {
+  const rest = CD_SCATTER.slice(2).map(([x, y]) => ({ x, y }));
+  const diag = [{ x: 0.26, y: 0.26 }, { x: 0.37, y: 0.37 }];
+
+  const ctx = document.getElementById('scatterChart').getContext('2d');
+  charts.scatter = new Chart(ctx, {
+    type: 'scatter',
+    data: {
+      datasets: [
+        {
+          label: 'Validation set (n=18)',
+          data: rest,
+          backgroundColor: 'rgba(0,229,255,0.5)',
+          pointRadius: 4, pointHoverRadius: 6,
+        },
+        {
+          label: 'Demo cars',
+          data: DEMO_CAR_PTS.map((p, i) => ({ ...p, _active: i === DEMO_CAR_IDX_MAP[0] })),
+          backgroundColor: DEMO_CAR_PTS.map((_, i) => i === DEMO_CAR_IDX_MAP[currentCar] ? '#ff2020' : 'rgba(255,107,53,0.7)'),
+          pointStyle: 'triangle',
+          pointRadius: 7, pointHoverRadius: 9,
+        },
+        {
+          label: 'y = x',
+          data: diag,
+          type: 'line',
+          borderColor: 'rgba(255,255,255,0.18)',
+          borderDash: [5, 4], borderWidth: 1,
+          pointRadius: 0, fill: false, tension: 0,
+        },
+      ]
+    },
+    options: mergeDeep(THEME, {
+      scales: {
+        x: { title: { display: true, text: 'CFD Cd (ground truth)', color: '#5a6a8a', font: { size: 8 } }, min: 0.26, max: 0.37 },
+        y: { title: { display: true, text: 'Predicted Cd',          color: '#5a6a8a', font: { size: 8 } }, min: 0.26, max: 0.37 },
+      }
+    })
+  });
+}
+
+function refreshScatter(carIdx) {
+  const ds = charts.scatter.data.datasets[1];
+  const activeIdx = DEMO_CAR_IDX_MAP[carIdx];
+  ds.backgroundColor = DEMO_CAR_PTS.map((_, i) =>
+    i === activeIdx ? '#ff2020' : 'rgba(255,107,53,0.55)'
+  );
+  charts.scatter.update('none');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LOSS CHART
+// ─────────────────────────────────────────────────────────────────────────────
+function initLoss() {
+  const ctx = document.getElementById('lossChart').getContext('2d');
+  const grad = ctx.createLinearGradient(0, 0, 0, 148);
+  grad.addColorStop(0,   'rgba(0,229,255,0.28)');
+  grad.addColorStop(0.7, 'rgba(0,229,255,0.05)');
+  grad.addColorStop(1,   'rgba(0,229,255,0.0)');
+
+  // Best checkpoint point
+  const bestIdx = LOSS_CURVE.epochs.indexOf(44);
+
+  charts.loss = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: LOSS_CURVE.epochs,
+      datasets: [
+        {
+          label: 'Val Loss',
+          data: LOSS_CURVE.valLoss,
+          borderColor: '#00e5ff', borderWidth: 2,
+          backgroundColor: grad, fill: true,
+          tension: 0.4, pointRadius: 0, pointHoverRadius: 4,
+        },
+        {
+          label: 'Best checkpoint',
+          data: LOSS_CURVE.epochs.map((_, i) => i === bestIdx ? LOSS_CURVE.valLoss[i] : null),
+          pointStyle: 'star', pointRadius: 7,
+          backgroundColor: '#f5c518', borderColor: '#f5c518',
+          showLine: false,
+        },
+      ]
+    },
+    options: mergeDeep(THEME, {
+      scales: {
+        x: { title: { display: true, text: 'Epoch', color: '#5a6a8a', font: { size: 8 } } },
+        y: { title: { display: true, text: 'Val Loss', color: '#5a6a8a', font: { size: 8 } } },
+      }
+    })
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CP HISTOGRAM
+// ─────────────────────────────────────────────────────────────────────────────
+function buildHistData(car) {
+  const bins = 38;
+  const { cpMin, cpMax } = car;
+  const bw = (cpMax - cpMin) / bins;
+  const labels = [], data = [];
+  for (let i = 0; i < bins; i++) {
+    const c = cpMin + (i + 0.5) * bw;
+    labels.push(c.toFixed(2));
+    // Bimodal: strong suction peak + softer stagnation shoulder
+    const peak1 = Math.exp(-Math.pow((c + 0.55) / 0.32, 2)) * 2900;
+    const peak2 = Math.exp(-Math.pow((c - 0.22) / 0.22, 2)) * 1100;
+    data.push(Math.max(0, Math.round(peak1 + peak2 + (Math.random() - 0.5) * 80)));
+  }
+  return { labels, data };
+}
+
+function initHistogram() {
+  const car = DEMO_CARS[0];
+  const { labels, data } = buildHistData(car);
+  const ctx = document.getElementById('histChart').getContext('2d');
+
+  const grad = ctx.createLinearGradient(0, 0, ctx.canvas.clientWidth || 360, 0);
+  grad.addColorStop(0,    'rgba(0,32,255,0.75)');
+  grad.addColorStop(0.48, 'rgba(200,200,255,0.6)');
+  grad.addColorStop(0.52, 'rgba(255,200,200,0.6)');
+  grad.addColorStop(1,    'rgba(255,20,20,0.75)');
+
+  charts.hist = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Vertex count',
+        data,
+        backgroundColor: grad,
+        borderWidth: 0,
+        barPercentage: 1.0,
+        categoryPercentage: 1.0,
+      }]
+    },
+    options: mergeDeep(THEME, {
+      plugins: { legend: { display: false } },
+      scales: {
+        x: {
+          title: { display: true, text: 'Cp value', color: '#5a6a8a', font: { size: 8 } },
+          ticks: { maxTicksLimit: 7, color: '#5a6a8a', font: { size: 7 } },
+        },
+        y: {
+          title: { display: true, text: 'Vertex count', color: '#5a6a8a', font: { size: 8 } },
+        },
+      }
+    })
+  });
+}
+
+function refreshHistogram(car) {
+  const { labels, data } = buildHistData(car);
+  charts.hist.data.labels                  = labels;
+  charts.hist.data.datasets[0].data        = data;
+  charts.hist.update('none');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  initScatter();
+  initLoss();
+  initHistogram();
+  selectCar(0);
+  startAutoPlay();
+});
+</script>
+</body>
+</html>
