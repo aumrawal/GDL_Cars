@@ -18,13 +18,14 @@ Usage:
 import os
 import sys
 import csv
+import json
 import time
 import argparse
 import yaml
 import torch
 import torch.nn as nn
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch_geometric.loader import DataLoader
 
 # Add project root to path
@@ -32,7 +33,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models.f1_net import F1AeroNet
 from train.losses import F1AeroLoss
-from data.drivaernet_dataset import DrivAerNetDataset, make_synthetic_dataset
+from data.drivaernet_dataset import (
+    DrivAerNetDataset, make_synthetic_dataset, compute_cd_stats_from_cache,
+)
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -100,6 +103,33 @@ def load_datasets(cfg: dict):
             rho          = data_cfg.get('rho', 1.225),
             U_inf        = data_cfg.get('U_inf', 83.33),
         )
+
+        # ── Cd normalisation stats (Fix 2) ──────────────────────────────────
+        # Use pre-saved stats if available; otherwise compute from train cache.
+        stats_path = os.path.join(data_root, 'cd_stats.json')
+        if not os.path.exists(stats_path):
+            cd_mean, cd_std, n = compute_cd_stats_from_cache(
+                train_data.cache_dir, train_data.design_ids
+            )
+            if n >= 2:
+                with open(stats_path, 'w') as f:
+                    json.dump({'cd_mean': cd_mean, 'cd_std': cd_std}, f, indent=2)
+                print(f"  Cd stats (computed from {n} samples): "
+                      f"mean={cd_mean:.4f}, std={cd_std:.6f}")
+            else:
+                print("  [WARNING] Cd cache empty — run a full data pass before training "
+                      "so Cd normalisation can be applied. "
+                      "Hint: iterate the dataset once or set force_reload=True.")
+                cd_mean, cd_std = train_data.cd_mean, train_data.cd_std
+        else:
+            with open(stats_path) as f:
+                s = json.load(f)
+            cd_mean, cd_std = s['cd_mean'], s['cd_std']
+            print(f"  Cd stats (loaded): mean={cd_mean:.4f}, std={cd_std:.6f}")
+
+        if cd_std > 1e-8:
+            train_data.set_cd_stats(cd_mean, cd_std)
+            val_data.set_cd_stats(cd_mean, cd_std)
 
     batch_size = cfg['training']['batch_size']
     train_loader = DataLoader(
@@ -254,7 +284,10 @@ def load_checkpoint(path: str, model, optimizer, scheduler):
     ckpt = torch.load(path, map_location='cpu', weights_only=False)
     model.load_state_dict(ckpt['model'])
     optimizer.load_state_dict(ckpt['optimizer'])
-    scheduler.load_state_dict(ckpt['scheduler'])
+    try:
+        scheduler.load_state_dict(ckpt['scheduler'])
+    except Exception as e:
+        print(f"  [INFO] Scheduler state not restored ({type(e).__name__}) — starting fresh.")
     return ckpt['epoch'], ckpt['best_val']
 
 
@@ -282,12 +315,14 @@ def train(cfg: dict, resume: str = None):
         lr=train_cfg['lr'],
         weight_decay=train_cfg['weight_decay'],
     )
-    scheduler = ReduceLROnPlateau(
+    # Read T_0 and T_mult from config so they're tunable from yaml
+    T_0    = train_cfg.get('T_0', 50)
+    T_mult = train_cfg.get('T_mult', 2)
+    scheduler = CosineAnnealingWarmRestarts(
         optimizer,
-        mode='min',
-        patience=train_cfg['lr_patience'],
-        factor=train_cfg['lr_factor'],
-        min_lr=train_cfg['min_lr'],
+        T_0=T_0,
+        T_mult=T_mult,
+        eta_min=train_cfg['min_lr'],
     )
 
     # ── Loss ─────────────────────────────────────────────────────────────
@@ -334,7 +369,7 @@ def train(cfg: dict, resume: str = None):
         val_losses = validate(model, val_loader, criterion, device)
 
         elapsed = time.time() - t0
-        scheduler.step(val_losses['total'])
+        scheduler.step()
 
         # Console summary
         print(f"  TRAIN  total={train_losses['total']:.5f}  "

@@ -8,13 +8,13 @@ data:
   L_ref: 5.0
 
 model:
-  in_channels: 6
+  in_channels: 9
   layer_types:
-    - [8,  2]
-    - [8,  2]
     - [16, 2]
+    - [16, 2]
+    - [24, 2]
     - [32, 1]
-    - [8,  1]
+    - [16, 1]
   max_freq: 2
   nonlin_samples: 5
   head_dropout: 0.1
@@ -25,8 +25,8 @@ training:
   batch_size: 1
   lr: 1.0e-3
   weight_decay: 0.0
-  lr_patience: 15
-  lr_factor: 0.5
+  T_0: 50
+  T_mult: 2
   min_lr: 1.0e-6
   grad_clip: 1.0
   checkpoint_dir: "/kaggle/working/GDL_Cars/runs/"
@@ -34,12 +34,12 @@ training:
   loss_weights:
     cp:  1.0
     wss: 1.0
-    cd:  0.1
+    cd:  1.0
     cl:  0.0
   loss_type:
     cp:  "huber"
     wss: "huber"
-    cd:  "l1"
+    cd:  "mse"
     cl:  "l1"
 
 eval:

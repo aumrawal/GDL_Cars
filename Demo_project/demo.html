@@ -284,7 +284,7 @@ header::before {
 /* KPI section */
 .kpi-section { padding: 16px 16px 14px; border-bottom: 1px solid var(--border); }
 
-.kpi-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.kpi-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
 .kpi-card {
   background: var(--bg-elevated); border: 1px solid var(--border);
@@ -296,7 +296,6 @@ header::before {
   border-radius: 2px 2px 0 0;
 }
 .kpi-card.cd::after    { background: linear-gradient(90deg, var(--gold), transparent); }
-.kpi-card.cl::after    { background: linear-gradient(90deg, var(--accent), transparent); }
 .kpi-card.spd::after   { background: linear-gradient(90deg, var(--orange), transparent); }
 
 .kpi-lbl {
@@ -307,7 +306,6 @@ header::before {
   font-family: var(--font-d); font-size: 20px; font-weight: 700; line-height: 1;
 }
 .kpi-card.cd  .kpi-val { color: var(--gold); }
-.kpi-card.cl  .kpi-val { color: var(--accent); }
 .kpi-card.spd .kpi-val { color: var(--orange); }
 .kpi-unit {
   font-size: 8px; color: var(--text-muted); margin-top: 3px;
@@ -476,12 +474,7 @@ canvas { display: block; }
           <div class="kpi-val" id="kpiCd">—</div>
           <div class="kpi-unit">Cd</div>
         </div>
-        <div class="kpi-card cl">
-          <div class="kpi-lbl">Downforce</div>
-          <div class="kpi-val" id="kpiCl">—</div>
-          <div class="kpi-unit">Cl (neg = down)</div>
-        </div>
-        <div class="kpi-card spd">
+<div class="kpi-card spd">
           <div class="kpi-lbl">Speedup vs CFD</div>
           <div class="kpi-val" id="kpiSpd">—</div>
           <div class="kpi-unit">× faster</div>
@@ -578,7 +571,7 @@ canvas { display: block; }
 const DEMO_CARS = [
   {
     id: 'car504', designId: '504', name: 'Fastback Sedan',
-    cd: 0.312, cl: -2.41,
+    cd: 0.312,
     cpImg:  'assets/F_S_WWS_WM_504_cp_predicted_3view.png',
     wssImg: 'assets/F_S_WWS_WM_504_wss.png',
     cpMin: -1.73, cpMax: 0.98, wssMax: 1.24,
@@ -586,7 +579,7 @@ const DEMO_CARS = [
   },
   {
     id: 'car577', designId: '577', name: 'Notchback Coupe',
-    cd: 0.289, cl: -2.68,
+    cd: 0.289,
     cpImg:  'assets/F_S_WWS_WM_577_cp_predicted_3view.png',
     wssImg: 'assets/F_S_WWS_WM_577_wss.png',
     cpMin: -1.89, cpMax: 0.91, wssMax: 1.41,
@@ -633,7 +626,6 @@ function selectCar(idx) {
 
   // Animate KPI numbers
   animateNumber('kpiCd',  car.cd,      3, 700);
-  animateNumber('kpiCl',  car.cl,      2, 700);
   animateNumber('kpiSpd', car.speedup, 0, 900, true);
 
   // Static chips

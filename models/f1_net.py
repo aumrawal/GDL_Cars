@@ -163,7 +163,7 @@ class F1AeroNet(nn.Module):
 
     def __init__(
         self,
-        in_channels:          int = 4,
+        in_channels:          int = 9,
         layer_specs:          List[Tuple[int, int]] = None,
         N_nonlin:             int = 7,
         head_hidden:          int = 128,
@@ -173,7 +173,7 @@ class F1AeroNet(nn.Module):
         super().__init__()
 
         if layer_specs is None:
-            layer_specs = [(16,2), (32,2), (32,3), (64,3), (64,2), (64,1)]
+            layer_specs = [(16,2), (16,2), (24,2), (32,1), (16,1)]
 
         # ── Input embedding: project scalar inputs to first feature type ──
         first_ftype = build_ftype(layer_specs[0][0], layer_specs[0][1])
@@ -194,6 +194,14 @@ class F1AeroNet(nn.Module):
                 )
             )
             self.ftypes.append(ftype_out)
+
+        # One linear projection per block for global context injection (scalars only)
+        self.global_projs = nn.ModuleList()
+        for ftype_out in self.ftypes[1:]:   # self.ftypes[k+1] = block k's output type
+            s_dim = sum(mult for order, mult in ftype_out if order == 0)
+            proj = nn.Linear(s_dim, s_dim, bias=False)
+            nn.init.zeros_(proj.weight)   # zero-init: starts as identity, learned gradually
+            self.global_projs.append(proj)
 
         last_ftype = self.ftypes[-1]
         last_dim   = feature_dim(last_ftype)
@@ -216,9 +224,9 @@ class F1AeroNet(nn.Module):
     @classmethod
     def from_config(cls, cfg: dict) -> 'F1AeroNet':
         """Construct from a config dict (see configs/f1_base.yaml)."""
-        specs = [tuple(s) for s in cfg.get('layer_types', [(16,2),(32,2),(32,3),(64,3),(64,2),(64,1)])]
+        specs = [tuple(s) for s in cfg.get('layer_types', [(16,2),(16,2),(24,2),(32,1),(16,1)])]
         return cls(
-            in_channels          = cfg.get('in_channels', 6),
+            in_channels          = cfg.get('in_channels', 9),
             layer_specs          = specs,
             N_nonlin             = cfg.get('nonlin_samples', 7),
             head_hidden          = 128,
@@ -247,8 +255,18 @@ class F1AeroNet(nn.Module):
         h = self.input_embed(x)   # (V, first_dim)
 
         # GEM blocks
-        for block in self.blocks:
-            h = block(h, edge_index, angles, transporters)   # (V, C_out)
+        for i, (block, global_proj) in enumerate(zip(self.blocks, self.global_projs)):
+            h = block(h, edge_index, angles, transporters)          # (V, C_out)
+
+            # Global context injection: pool scalars, project, broadcast back
+            ftype_out = self.ftypes[i + 1]
+            s_dim = sum(mult for order, mult in ftype_out if order == 0)
+            g = global_mean_pool(h[:, :s_dim], batch)               # (B, s_dim)
+            g = global_proj(g)                                      # (B, s_dim)
+            # Additive residual into scalar channels only (zero for vector/tensor channels)
+            context = torch.zeros_like(h)
+            context[:, :s_dim] = g[batch]
+            h = h + context
 
         # Symmetry breaking / feature projection for heads
         if self.break_symmetry:

@@ -146,7 +146,9 @@ def mesh_to_pyg_data(raw, rho=1.225, U_inf=83.33, design_id="") -> Data:
                     np.clip((cp_sl - cp_mean) / cp_std, -5.0, 5.0).astype(np.float32)
                   )                                       # ±5σ Winsorisation
     else:
-        cp_nd = torch.zeros(verts_t.shape[0])
+        cp_nd   = torch.zeros(verts_t.shape[0])
+        cp_mean = 0.0
+        cp_std  = 1.0
 
     # ── WSS ───────────────────────────────────────────────────────────────
     mu    = 1.81e-5   # dynamic viscosity of air, Pa·s
@@ -156,15 +158,15 @@ def mesh_to_pyg_data(raw, rho=1.225, U_inf=83.33, design_id="") -> Data:
         tau_ref  = mu * U_inf / L_ref
         wss_new  = wss / tau_ref
         wss_new  = symlog(wss_new)              # compress heavy tails
-        wss_mean = wss_new.mean()
-        wss_std  = wss_new.std().clip(1e-8)
+        wss_mean = wss_new.mean(axis=0)         # (3,) one mean per component
+        wss_std  = wss_new.std(axis=0).clip(1e-8)  # (3,)
         wss_nd   = torch.from_numpy(
                     np.clip((wss_new - wss_mean) / wss_std, -5.0, 5.0).astype(np.float32)
                 )                           # ±5σ Winsorisation
     else:
         wss_nd   = torch.zeros(verts_t.shape[0], 3)
-        wss_mean = 0.0
-        wss_std  = 1.0
+        wss_mean = np.zeros(3, dtype=np.float32)
+        wss_std  = np.ones(3, dtype=np.float32)
 
     # ── Cd / Cl ───────────────────────────────────────────────────────────
     # defined here, outside all if blocks — always assigned
@@ -174,6 +176,9 @@ def mesh_to_pyg_data(raw, rho=1.225, U_inf=83.33, design_id="") -> Data:
     # ── Graph geometry ────────────────────────────────────────────────────
     edge_index = build_edge_index_from_faces(faces_t)
     geo = precompute_geometry(verts_t, faces_t, edge_index)
+    normals_t = geo['normals']   # (V, 3) unit outward vertex normals
+    x = torch.cat([x, normals_t], dim=-1)   # (V, 9): was (V, 6)
+    # NOTE: bump CACHE_VERSION below if you change features or normalisation
     return Data(
         x                 = x,
         edge_index        = edge_index,
@@ -189,18 +194,43 @@ def mesh_to_pyg_data(raw, rho=1.225, U_inf=83.33, design_id="") -> Data:
         num_nodes         = verts_t.shape[0],
         cp_sl_mean        = cp_mean,
         cp_sl_std         = cp_std,
-        wss_sl_mean       = wss_mean,
-        wss_sl_std        = wss_std,
+        wss_sl_mean       = torch.from_numpy(wss_mean.astype(np.float32)),
+        wss_sl_std        = torch.from_numpy(wss_std.astype(np.float32)),
+        vertex_normals    = normals_t,
+        cache_version     = torch.tensor([2]),
     )
+
+def compute_cd_stats_from_cache(cache_dir: str, design_ids: list):
+    """
+    Scan cached .pt files to compute Cd mean and std for the training split.
+    Returns (mean, std, count). Returns (0.0, 1.0, 0) if cache is empty.
+    """
+    cds = []
+    for did in design_ids:
+        path = os.path.join(cache_dir, f"{did}.pt")
+        if os.path.exists(path):
+            d = torch.load(path, weights_only=False)
+            if hasattr(d, 'y_cd') and d.y_cd is not None:
+                cds.append(float(d.y_cd.reshape(-1)[0]))
+    if len(cds) < 2:
+        return 0.0, 1.0, len(cds)
+    t = torch.tensor(cds, dtype=torch.float32)
+    return float(t.mean()), float(t.std()), len(cds)
+
 
 class DrivAerNetDataset(Dataset):
     def __init__(self, data_root, split='train', rho=1.225, U_inf=83.33,
-                 force_reload=False, max_vertices=None):
+                 force_reload=False, max_vertices=None, normalize_cd=True):
         self.data_root    = data_root
         self.split        = split
         self.rho          = rho
         self.U_inf        = U_inf
         self.force_reload = force_reload
+
+        # Cd normalisation stats (populated by set_cd_stats or auto-loaded below)
+        self._normalize_cd = normalize_cd
+        self.cd_mean: float = 0.0
+        self.cd_std:  float = 1.0
 
         split_file = os.path.join(data_root, 'split.json')
         if os.path.exists(split_file):
@@ -226,14 +256,38 @@ class DrivAerNetDataset(Dataset):
         os.makedirs(self.cache_dir, exist_ok=True)
         super().__init__(root=None)
 
+        # Auto-load pre-saved stats (written by the trainer from the train split)
+        if normalize_cd:
+            stats_path = os.path.join(data_root, 'cd_stats.json')
+            if os.path.exists(stats_path):
+                with open(stats_path) as f:
+                    s = json.load(f)
+                self.cd_mean = float(s['cd_mean'])
+                self.cd_std  = float(s['cd_std'])
+
+    def set_cd_stats(self, mean: float, std: float) -> None:
+        """Set Cd normalisation stats (called by the trainer after computing from train split)."""
+        self.cd_mean = mean
+        self.cd_std  = std
+        self._normalize_cd = True
+
     def len(self):
         return len(self.design_ids)
 
     def get(self, idx):
+        CACHE_VERSION = 2  # increment when mesh_to_pyg_data changes format
         did = self.design_ids[idx]
         cache_path = os.path.join(self.cache_dir, f"{did}.pt")
         if os.path.exists(cache_path) and not self.force_reload:
-            return torch.load(cache_path, weights_only=False)
+            data = torch.load(cache_path, weights_only=False)
+            if getattr(data, 'cache_version', torch.tensor([0])).item() != CACHE_VERSION:
+                os.remove(cache_path)
+            else:
+                if self._normalize_cd and self.cd_std > 1e-8:
+                    data.y_cd   = (data.y_cd - self.cd_mean) / self.cd_std
+                    data.cd_mean = torch.tensor([self.cd_mean], dtype=torch.float32)
+                    data.cd_std  = torch.tensor([self.cd_std],  dtype=torch.float32)
+                return data
         vtp_path = os.path.join(self.data_root, 'meshes', f"{did}.vtp")
         if not os.path.exists(vtp_path):
             raise FileNotFoundError(f"Missing: {vtp_path}")
@@ -245,6 +299,13 @@ class DrivAerNetDataset(Dataset):
             torch.save(data, cache_path)
         except Exception as e:
             print(f'    Cache save skipped: {e}')
+
+        # Apply Cd z-score normalisation on-the-fly (cache stores raw values)
+        if self._normalize_cd and self.cd_std > 1e-8:
+            data.y_cd   = (data.y_cd - self.cd_mean) / self.cd_std
+            data.cd_mean = torch.tensor([self.cd_mean], dtype=torch.float32)
+            data.cd_std  = torch.tensor([self.cd_std],  dtype=torch.float32)
+
         return data
 
 
