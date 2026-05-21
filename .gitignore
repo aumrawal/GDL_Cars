@@ -18,3 +18,8 @@ __pycache__/
 *.sh
 Miniconda3-latest-MacOSX-arm64.sh
 /DrivAerNet++/
+
+# Allow checkpoint resumption files
+!runs_new/
+!runs_new/*.pt
+!runs_new/*.csv
