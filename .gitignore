@@ -8,6 +8,7 @@ f1_gdl_env/
 __pycache__/
 
 # Large data files and installers
+
 *.zip
 *.vtp
 *.vtk
@@ -29,3 +30,7 @@ outreach_contacts.md
 !runs_80-118/
 !runs_80-118/*.pt
 !runs_80-118/*.csv
+
+!runs_80-158/
+!runs_80-158/*.pt
+!runs_80-158/*.csv
