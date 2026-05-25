@@ -168,6 +168,7 @@ class F1AeroNet(nn.Module):
         N_nonlin:             int = 7,
         head_hidden:          int = 128,
         head_dropout:         float = 0.1,
+        cd_head_dropout:      float = 0.5,
         break_symmetry_final: bool = True,
     ):
         super().__init__()
@@ -218,7 +219,7 @@ class F1AeroNet(nn.Module):
         # ── Prediction heads (now with boosted init) ──────────────────────
         self.cp_head  = ScalarHead(head_in, hidden=head_hidden, dropout=head_dropout)
         self.wss_head = VectorHead(head_in, hidden=head_hidden, dropout=head_dropout)
-        self.cd_head  = GlobalHead(head_in, hidden=head_hidden // 2, dropout=head_dropout)
+        self.cd_head  = GlobalHead(head_in, hidden=head_hidden // 2, dropout=cd_head_dropout)
         self.cl_head  = None   # cl not in DrivAerNet WWS_WM subset
 
     @classmethod
@@ -231,6 +232,7 @@ class F1AeroNet(nn.Module):
             N_nonlin             = cfg.get('nonlin_samples', 7),
             head_hidden          = 128,
             head_dropout         = cfg.get('head_dropout', 0.1),
+            cd_head_dropout      = cfg.get('cd_head_dropout', 0.5),
             break_symmetry_final = cfg.get('break_symmetry_final', True),
         )
 
@@ -277,7 +279,7 @@ class F1AeroNet(nn.Module):
         # Predictions
         cp  = self.cp_head(h_heads)              # (V,)
         wss = self.wss_head(h_heads)             # (V, 3)
-        cd  = self.cd_head(h_heads, batch)       # (B,)
+        cd  = self.cd_head(h_heads.detach(), batch)   # detach: Cd loss cannot update backbone
         cl  = self.cl_head(h_heads, batch) if self.cl_head is not None else None
 
         return {'cp': cp, 'wss': wss, 'cd': cd, 'cl': cl}

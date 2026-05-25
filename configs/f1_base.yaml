@@ -18,6 +18,7 @@ model:
   max_freq: 2
   nonlin_samples: 5
   head_dropout: 0.1
+  cd_head_dropout: 0.5
   break_symmetry_final: true
 
 training:
@@ -34,7 +35,7 @@ training:
   loss_weights:
     cp:  1.0
     wss: 1.0
-    cd:  1.0
+    cd:  0.1
     cl:  0.0
   loss_type:
     cp:  "huber"

@@ -34,3 +34,7 @@ outreach_contacts.md
 !runs_80-158/
 !runs_80-158/*.pt
 !runs_80-158/*.csv
+
+!final_runs/
+!final_runs/*.csv
+!final_runs/*.pt
