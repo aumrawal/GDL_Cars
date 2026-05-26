@@ -20,9 +20,11 @@ __pycache__/
 Miniconda3-latest-MacOSX-arm64.sh
 /DrivAerNet++/
 
-outreach_contacts.md
+# Markdown files (except README)
+*.md
+!README.md
 
- # Allow checkpoint resumption files
+# Allow checkpoint resumption files
 !runs_new/
 !runs_new/*.pt
 !runs_new/*.csv
