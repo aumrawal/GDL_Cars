@@ -51,3 +51,5 @@ viz/
 !new_final_run/
 !new_final_run/*.pt
 
+!phase_2_train/
+!phase_2_train/*.pt

@@ -30,7 +30,7 @@ import torch
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from models.f1_net import F1AeroNet
-from data.drivaernet_dataset import DrivAerNetDataset
+from data.drivaernet_dataset import DrivAerNetDataset, load_merged_vtp, mesh_to_pyg_data
 
 try:
     import matplotlib

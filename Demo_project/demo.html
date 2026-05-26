@@ -554,13 +554,6 @@ canvas { display: block; }
         <div class="chart-wrap"><canvas id="lossChart"></canvas></div>
       </div>
 
-      <div class="chart-card">
-        <div class="chart-head">
-          <span class="chart-title" id="histTitle">Cp Distribution — Design 504</span>
-          <span class="chart-note">Per-vertex (predicted)</span>
-        </div>
-        <div class="chart-wrap"><canvas id="histChart"></canvas></div>
-      </div>
     </div>
 
     <!-- Model details -->
@@ -724,11 +717,6 @@ function selectCar(idx) {
 
   // Colorbar
   refreshColorbar(car);
-
-  // Histogram title + data
-  document.getElementById('histTitle').textContent =
-    'Cp Distribution — Design ' + car.designId;
-  if (charts.hist) refreshHistogram(car);
 
 }
 
@@ -983,70 +971,6 @@ function initLoss() {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CP HISTOGRAM
-// ─────────────────────────────────────────────────────────────────────────────
-function buildHistData(car) {
-  const bins = 38;
-  const { cpMin, cpMax } = car;
-  const bw = (cpMax - cpMin) / bins;
-  const labels = [], data = [];
-  for (let i = 0; i < bins; i++) {
-    const c = cpMin + (i + 0.5) * bw;
-    labels.push(c.toFixed(2));
-    // Bimodal: strong suction peak + softer stagnation shoulder
-    const peak1 = Math.exp(-Math.pow((c + 0.55) / 0.32, 2)) * 2900;
-    const peak2 = Math.exp(-Math.pow((c - 0.22) / 0.22, 2)) * 1100;
-    data.push(Math.max(0, Math.round(peak1 + peak2 + (Math.random() - 0.5) * 80)));
-  }
-  return { labels, data };
-}
-
-function initHistogram() {
-  const car = DEMO_CARS[0];
-  const { labels, data } = buildHistData(car);
-  const ctx = document.getElementById('histChart').getContext('2d');
-
-  const grad = ctx.createLinearGradient(0, 0, ctx.canvas.clientWidth || 360, 0);
-  grad.addColorStop(0,    'rgba(0,32,255,0.75)');
-  grad.addColorStop(0.48, 'rgba(200,200,255,0.6)');
-  grad.addColorStop(0.52, 'rgba(255,200,200,0.6)');
-  grad.addColorStop(1,    'rgba(255,20,20,0.75)');
-
-  charts.hist = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [{
-        label: 'Vertex count',
-        data,
-        backgroundColor: grad,
-        borderWidth: 0,
-        barPercentage: 1.0,
-        categoryPercentage: 1.0,
-      }]
-    },
-    options: mergeDeep(THEME, {
-      plugins: { legend: { display: false } },
-      scales: {
-        x: {
-          title: { display: true, text: 'Cp value', color: '#5a6a8a', font: { size: 8 } },
-          ticks: { maxTicksLimit: 7, color: '#5a6a8a', font: { size: 7 } },
-        },
-        y: {
-          title: { display: true, text: 'Vertex count', color: '#5a6a8a', font: { size: 8 } },
-        },
-      }
-    })
-  });
-}
-
-function refreshHistogram(car) {
-  const { labels, data } = buildHistData(car);
-  charts.hist.data.labels                  = labels;
-  charts.hist.data.datasets[0].data        = data;
-  charts.hist.update('none');
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // INIT
@@ -1054,7 +978,6 @@ function refreshHistogram(car) {
 document.addEventListener('DOMContentLoaded', () => {
   initScatter();
   initLoss();
-  initHistogram();
   selectCar(0);
   startAutoPlay();
 });
