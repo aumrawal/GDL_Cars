@@ -346,6 +346,20 @@ def _write_vtp_placeholder(design_id: str, out_dir: str):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Load a single sample from a user-supplied VTP file
+# ─────────────────────────────────────────────────────────────────────────────
+
+def load_sample_from_vtp(vtp_path: str) -> object:
+    """Parse a DrivAerNet++ VTP file and return a PyG Data object."""
+    print(f"  Loading VTP:  {vtp_path}")
+    raw = load_merged_vtp(vtp_path)
+    design_id = os.path.splitext(os.path.basename(vtp_path))[0]
+    data = mesh_to_pyg_data(raw, design_id=design_id)
+    print(f"  Vertices: {data.num_nodes:,}   Edges: {data.edge_index.shape[1]:,}")
+    return data
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Main
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -353,8 +367,11 @@ def main():
     parser = argparse.ArgumentParser(description="F1AeroNet live client demo")
     parser.add_argument("--checkpoint", default="new_final_run/best.pt",
                         help="Path to trained .pt checkpoint")
+    parser.add_argument("--vtp",        default=None,
+                        help="Path to a VTP file to run inference on directly "
+                             "(skips val-set selection)")
     parser.add_argument("--data_root",  default="data/drivaernet_real",
-                        help="Path to DrivAerNet++ data root (needs processed/ cache)")
+                        help="Path to DrivAerNet++ data root (used when --vtp is omitted)")
     parser.add_argument("--cd_stats",   default=None,
                         help="Path to cd_stats.json (auto-detected if omitted)")
     parser.add_argument("--out",        default="outputs/client_demo",
@@ -370,7 +387,10 @@ def main():
     print(f"{'='*60}")
     print(f"  Device:      {device}")
     print(f"  Checkpoint:  {args.checkpoint}")
-    print(f"  Data root:   {args.data_root}")
+    if args.vtp:
+        print(f"  Input VTP:   {args.vtp}")
+    else:
+        print(f"  Data root:   {args.data_root}  (val split)")
     print(f"  Output:      {args.out}")
 
     # ── Model ────────────────────────────────────────────────────────────────
@@ -379,40 +399,47 @@ def main():
     n_params = sum(p.numel() for p in model.parameters())
     print(f"  Parameters:  {n_params:,}")
 
-    # ── Dataset ──────────────────────────────────────────────────────────────
-    print("\n[2/5]  Loading test dataset …")
+    # ── Cd stats (needed for denormalising Cd regardless of data source) ─────
     cd_stats_path = args.cd_stats or os.path.join(
         os.path.dirname(args.checkpoint), "cd_stats.json"
     )
     if not os.path.exists(cd_stats_path):
         cd_stats_path = os.path.join(args.data_root, "cd_stats.json")
 
-    dataset = DrivAerNetDataset(
-        data_root    = args.data_root,
-        split        = "val",
-        normalize_cd = os.path.exists(cd_stats_path),
-    )
     if os.path.exists(cd_stats_path):
         with open(cd_stats_path) as f:
             cd_stats = json.load(f)
-        dataset.set_cd_stats(cd_stats["cd_mean"], cd_stats["cd_std"])
-        print(f"  Cd stats loaded  mean={cd_stats['cd_mean']:.4f}  "
+        print(f"  Cd stats:    mean={cd_stats['cd_mean']:.4f}  "
               f"std={cd_stats['cd_std']:.4f}")
     else:
         cd_stats = {"cd_mean": 0.0, "cd_std": 1.0}
         print("  [WARNING] cd_stats.json not found — Cd shown in normalised units")
 
-    # ── Pick best sample ─────────────────────────────────────────────────────
-    print("\n[3/5]  Selecting best test sample …")
-    best_data  = pick_best_sample(model, dataset, device)
-    design_id  = getattr(best_data, "design_id", "unknown")
+    # ── Load sample ──────────────────────────────────────────────────────────
+    if args.vtp:
+        print("\n[2/5]  Loading VTP file …")
+        best_data = load_sample_from_vtp(args.vtp)
+        design_id = getattr(best_data, "design_id", "unknown")
+        print(f"\n[3/5]  (Skipped — VTP provided directly)")
+    else:
+        print("\n[2/5]  Loading val dataset …")
+        dataset = DrivAerNetDataset(
+            data_root    = args.data_root,
+            split        = "val",
+            normalize_cd = os.path.exists(cd_stats_path),
+        )
+        dataset.set_cd_stats(cd_stats["cd_mean"], cd_stats["cd_std"])
+
+        print("\n[3/5]  Selecting best val sample …")
+        best_data = pick_best_sample(model, dataset, device)
+        design_id = getattr(best_data, "design_id", "unknown")
 
     # ── Timed inference ──────────────────────────────────────────────────────
     print("[4/5]  Running timed inference …")
     pred, elapsed_ms = timed_inference(model, best_data, device)
 
     n_verts = best_data.num_nodes
-    n_edges = best_data.edge_index.shape[1]
+    n_edges = best_data.edge_index.shape[1] if hasattr(best_data, "edge_index") else 0
     print(f"  Design:      {design_id}")
     print(f"  Vertices:    {n_verts:,}")
     print(f"  Edges:       {n_edges:,}")
