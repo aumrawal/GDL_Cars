@@ -24,6 +24,10 @@ Miniconda3-latest-MacOSX-arm64.sh
 *.md
 !README.md
 
+# Discussion/notes files
+*.pages
+*.txt
+
 # Allow checkpoint resumption files
 !runs_new/
 !runs_new/*.pt
