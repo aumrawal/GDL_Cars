@@ -19,6 +19,7 @@ __pycache__/
 *.sh
 Miniconda3-latest-MacOSX-arm64.sh
 /DrivAerNet++/
+viz/
 
 # Markdown files (except README)
 *.md
@@ -27,6 +28,8 @@ Miniconda3-latest-MacOSX-arm64.sh
 # Discussion/notes files
 *.pages
 *.txt
+
+
 
 # Allow checkpoint resumption files
 !runs_new/
@@ -44,3 +47,7 @@ Miniconda3-latest-MacOSX-arm64.sh
 !final_runs/
 !final_runs/*.csv
 !final_runs/*.pt
+
+!new_final_run/
+!new_final_run/*.pt
+

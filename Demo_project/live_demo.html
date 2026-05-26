@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>F1AeroNet — Live Prediction Viewer</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
+
+<!-- Dependencies -->
+<script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:          #0a0e17;
+  --bg-card:     #0d1320;
+  --bg-panel:    #0f1622;
+  --bg-elevated: #141c2e;
+  --border:      rgba(255,255,255,0.07);
+  --border-hi:   rgba(0,229,255,0.28);
+  --accent:      #00e5ff;
+  --accent-glow: rgba(0,229,255,0.18);
+  --gold:        #f5c518;
+  --red:         #ff2020;
+  --green:       #22d16a;
+  --orange:      #ff6b35;
+  --text:        #e2e8f4;
+  --text-muted:  #5a6a8a;
+  --text-dim:    #8a9ab8;
+  --font:        'DM Sans', system-ui, sans-serif;
+  --font-d:      'Orbitron', monospace;
+  --r:           8px;
+}
+
+html, body { height: 100%; font-family: var(--font); background: var(--bg); color: var(--text);
+  font-size: 13px; line-height: 1.5; -webkit-font-smoothing: antialiased; overflow: hidden; }
+
+/* ── HEADER ── */
+header {
+  height: 54px; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px; background: var(--bg-panel); border-bottom: 1px solid var(--border);
+  position: relative; overflow: hidden; flex-shrink: 0; z-index: 10;
+}
+header::before {
+  content: ''; position: absolute; inset: 0;
+  background-image: repeating-linear-gradient(45deg, rgba(255,255,255,0.018) 0, rgba(255,255,255,0.018) 1px, transparent 0, transparent 50%),
+                    repeating-linear-gradient(-45deg, rgba(255,255,255,0.018) 0, rgba(255,255,255,0.018) 1px, transparent 0, transparent 50%);
+  background-size: 8px 8px; pointer-events: none;
+}
+.header-brand { display: flex; align-items: center; gap: 14px; position: relative; }
+.logo-mark {
+  width: 38px; height: 38px;
+  background: linear-gradient(135deg, var(--accent) 0%, #0055ff 100%);
+  border-radius: 9px; display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-d); font-size: 13px; font-weight: 900; color: #000;
+  box-shadow: 0 0 22px var(--accent-glow);
+}
+.brand-copy h1 { font-family: var(--font-d); font-size: 13px; font-weight: 700; letter-spacing: 0.8px; }
+.brand-copy h1 .sub { color: var(--accent); font-size: 9.5px; font-weight: 400; margin-left: 8px; opacity: 0.8; }
+.brand-copy p  { font-size: 10.5px; color: var(--text-muted); margin-top: 1px; }
+.header-right  { display: flex; align-items: center; gap: 10px; position: relative; }
+#meshInfoChip  { font-size: 10px; color: var(--accent); font-family: var(--font-d); letter-spacing: 0.5px; opacity: 0.9; }
+.btn-reset {
+  font-size: 9.5px; font-weight: 600; font-family: var(--font-d); letter-spacing: 0.5px;
+  padding: 5px 14px; border-radius: 6px; cursor: pointer; text-transform: uppercase;
+  border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04);
+  color: var(--text-dim); transition: all 0.2s;
+}
+.btn-reset:hover { border-color: var(--border-hi); color: var(--accent); }
+
+/* ── UPLOAD SCREEN ── */
+#uploadScreen {
+  display: flex; flex-direction: column; height: 100vh;
+}
+.drop-area {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 24px; cursor: pointer; transition: background 0.2s;
+}
+.drop-area.drag-over { background: rgba(0,229,255,0.04); }
+.drop-icon {
+  width: 90px; height: 90px; border-radius: 20px;
+  border: 2px dashed rgba(0,229,255,0.3);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 36px; color: var(--accent); opacity: 0.7;
+  transition: opacity 0.2s, border-color 0.2s;
+}
+.drop-area.drag-over .drop-icon { opacity: 1; border-color: var(--accent); }
+.drop-title { font-family: var(--font-d); font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: 1px; }
+.drop-sub   { font-size: 12px; color: var(--text-muted); text-align: center; line-height: 1.7; max-width: 420px; }
+.drop-sub strong { color: var(--text-dim); }
+.drop-btn {
+  font-size: 10px; font-weight: 700; font-family: var(--font-d); letter-spacing: 0.8px;
+  text-transform: uppercase; padding: 10px 28px; border-radius: 8px; cursor: pointer;
+  border: 1px solid rgba(0,229,255,0.4); background: rgba(0,229,255,0.07);
+  color: var(--accent); transition: all 0.2s;
+}
+.drop-btn:hover { background: rgba(0,229,255,0.14); border-color: var(--accent); }
+.drop-error { font-size: 11px; color: var(--red); font-family: var(--font-d); display: none; }
+.drop-error.visible { display: block; }
+#fileInput { display: none; }
+
+/* ── VIEWER SCREEN ── */
+#viewerScreen { display: none; flex-direction: column; height: 100vh; }
+.viewer-body {
+  flex: 1; display: grid; grid-template-columns: 1fr 390px;
+  overflow: hidden; min-height: 0;
+}
+
+/* ── 3D CANVAS PANEL ── */
+.canvas-panel {
+  position: relative; background: #040810; overflow: hidden;
+  border-right: 1px solid var(--border);
+}
+#threeCanvas { display: block; width: 100%; height: 100%; }
+
+/* Field toggle */
+.field-toggle {
+  position: absolute; bottom: 14px; left: 14px; z-index: 5;
+  display: flex; flex-wrap: wrap; gap: 3px; max-width: 420px;
+  background: rgba(4,8,16,0.92); border: 1px solid var(--border-hi);
+  border-radius: 9px; padding: 3px; backdrop-filter: blur(12px);
+}
+.field-btn {
+  padding: 5px 12px; border-radius: 6px; border: none;
+  background: transparent; color: var(--text-muted);
+  font-size: 9.5px; font-weight: 600; font-family: var(--font);
+  cursor: pointer; transition: all 0.18s; letter-spacing: 0.6px; text-transform: uppercase;
+  white-space: nowrap;
+}
+.field-btn.active { background: var(--accent); color: #000; }
+.field-btn:not(.active):hover { color: var(--text); }
+.field-btn.pred  { }
+.field-btn.gt    { }
+.field-btn.err   { }
+
+/* Rotate toggle */
+.rotate-btn {
+  position: absolute; top: 12px; right: 60px; z-index: 5;
+  font-size: 9px; font-weight: 700; font-family: var(--font-d); letter-spacing: 0.6px;
+  text-transform: uppercase; padding: 5px 12px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--border); background: rgba(4,8,16,0.85);
+  color: var(--text-muted); transition: all 0.2s; backdrop-filter: blur(6px);
+}
+.rotate-btn.on { border-color: rgba(0,229,255,0.4); color: var(--accent); }
+
+/* Colorbar */
+.colorbar {
+  position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+  display: flex; align-items: center; gap: 6px; z-index: 5;
+}
+.cb-labels { display: flex; flex-direction: column; justify-content: space-between; height: 170px; text-align: right; }
+.cb-labels span { font-size: 9px; font-family: var(--font-d); color: var(--text-muted); letter-spacing: 0.5px; }
+.cb-bar { width: 13px; height: 170px; border-radius: 7px; border: 1px solid rgba(255,255,255,0.1); transition: background 0.4s; }
+.cb-title { writing-mode: vertical-lr; transform: rotate(180deg); font-size: 8px; font-weight: 700;
+  font-family: var(--font-d); color: var(--text-muted); text-transform: uppercase; letter-spacing: 1.5px; }
+
+/* Loading overlay */
+.loading-overlay {
+  position: absolute; inset: 0; background: rgba(4,8,16,0.85);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; z-index: 20; backdrop-filter: blur(4px);
+}
+.loading-overlay.hidden { display: none; }
+.spinner {
+  width: 36px; height: 36px; border: 3px solid rgba(0,229,255,0.15);
+  border-top-color: var(--accent); border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text { font-size: 11px; font-family: var(--font-d); color: var(--text-dim); letter-spacing: 0.5px; }
+
+/* ── METRICS PANEL ── */
+.metrics-panel {
+  display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden;
+  background: var(--bg-panel); min-height: 0;
+}
+.metrics-panel::-webkit-scrollbar { width: 3px; }
+.metrics-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+
+.sec-header {
+  font-size: 9.5px; font-weight: 700; font-family: var(--font-d);
+  color: var(--text-muted); text-transform: uppercase; letter-spacing: 1.2px;
+  display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+}
+.sec-header::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+/* KPI row */
+.kpi-section { padding: 14px 16px 12px; border-bottom: 1px solid var(--border); }
+.kpi-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.kpi-card {
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px; position: relative; overflow: hidden;
+}
+.kpi-card::after { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; border-radius: 2px 2px 0 0; }
+.kpi-card.cp::after  { background: linear-gradient(90deg, var(--accent), transparent); }
+.kpi-card.wss::after { background: linear-gradient(90deg, var(--orange), transparent); }
+.kpi-card.cd::after  { background: linear-gradient(90deg, var(--gold), transparent); }
+.kpi-card.err::after { background: linear-gradient(90deg, var(--red), transparent); }
+.kpi-lbl { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-muted); margin-bottom: 4px; }
+.kpi-val { font-family: var(--font-d); font-size: 18px; font-weight: 700; line-height: 1; }
+.kpi-card.cp  .kpi-val { color: var(--accent); }
+.kpi-card.wss .kpi-val { color: var(--orange); }
+.kpi-card.cd  .kpi-val { color: var(--gold); }
+.kpi-card.err .kpi-val { color: var(--red); }
+.kpi-sub { font-size: 8px; color: var(--text-muted); margin-top: 3px; font-family: var(--font-d); }
+
+/* Field metrics table */
+.field-section { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.metric-grid {
+  display: grid; grid-template-columns: 2.5fr 2fr 2fr;
+  gap: 2px 0; font-size: 9.5px;
+}
+.mg-h { font-size: 8px; font-weight: 700; font-family: var(--font-d); color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.7px; padding: 3px 0;
+  border-bottom: 1px solid var(--border); margin-bottom: 2px; }
+.mg-k { font-family: var(--font-d); font-size: 9.5px; font-weight: 600; color: var(--text); padding: 3px 0; }
+.mg-v { font-family: var(--font-d); font-size: 9.5px; color: var(--text-dim); padding: 3px 0; }
+.mg-v.good { color: var(--green); }
+.mg-v.warn { color: var(--gold); }
+.mg-v.bad  { color: var(--red); }
+
+/* Cd comparison */
+.cd-section { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.cd-inputs { display: flex; gap: 8px; align-items: flex-end; margin-bottom: 10px; }
+.cd-field { flex: 1; }
+.cd-field label { display: block; font-size: 8.5px; font-weight: 600; font-family: var(--font-d);
+  color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 4px; }
+.cd-field input {
+  width: 100%; padding: 6px 8px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--bg-elevated);
+  color: var(--text); font-family: var(--font-d); font-size: 11px;
+  outline: none; transition: border-color 0.2s;
+}
+.cd-field input:focus { border-color: rgba(0,229,255,0.4); }
+.cd-result {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+}
+.cd-stat { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
+.cd-stat .lbl { font-size: 8px; color: var(--text-muted); font-family: var(--font-d);
+  text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 3px; }
+.cd-stat .val { font-family: var(--font-d); font-size: 13px; font-weight: 700; color: var(--text); }
+.cd-stat .val.good { color: var(--green); }
+.cd-stat .val.bad  { color: var(--red); }
+
+/* Vertex stats */
+.stats-section { padding: 12px 16px 14px; }
+.stat-row { display: flex; justify-content: space-between; align-items: center;
+  padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.03); font-size: 10px; }
+.stat-row:last-child { border-bottom: none; }
+.stat-k { color: var(--text-muted); }
+.stat-v { font-family: var(--font-d); font-size: 10px; font-weight: 600; color: var(--text); letter-spacing: 0.3px; }
+
+/* ── FOOTER ── */
+footer {
+  height: 38px; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px; background: var(--bg-panel); border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.footer-note { font-size: 10px; color: var(--text-muted); }
+.footer-note strong { color: var(--accent); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════ UPLOAD SCREEN ══════════════ -->
+<div id="uploadScreen">
+  <header>
+    <div class="header-brand">
+      <div class="logo-mark">F1</div>
+      <div class="brand-copy">
+        <h1>F1AeroNet <span class="sub">Live Viewer</span></h1>
+        <p>Upload a prediction VTP · Compare predicted vs CFD fields live</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <span style="font-size:9.5px;color:var(--text-muted);font-family:var(--font-d);">CLIENT DEMO MODE</span>
+    </div>
+  </header>
+
+  <div class="drop-area" id="dropArea">
+    <input type="file" id="fileInput" accept=".vtp">
+    <div class="drop-icon">⬡</div>
+    <div>
+      <div class="drop-title">Drop prediction VTP here</div>
+    </div>
+    <div class="drop-sub">
+      Upload a <strong>*_predictions.vtp</strong> file generated by <strong>visualise.py</strong>.<br>
+      The file must contain fields: <strong>Cp_pred, Cp_true, Cp_error, WSS_pred_mag, WSS_true_mag.</strong><br>
+      All parsing and rendering runs entirely in your browser — nothing is uploaded.
+    </div>
+    <button class="drop-btn" onclick="document.getElementById('fileInput').click()">Browse Files</button>
+    <div class="drop-error" id="dropError">Could not parse VTP file — see console for details.</div>
+  </div>
+</div>
+
+<!-- ══════════════ VIEWER SCREEN ══════════════ -->
+<div id="viewerScreen">
+  <header>
+    <div class="header-brand">
+      <div class="logo-mark">F1</div>
+      <div class="brand-copy">
+        <h1>F1AeroNet <span class="sub">Live Viewer</span></h1>
+        <p id="meshInfoLine">Loading…</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <span id="meshInfoChip"></span>
+      <button class="btn-reset" onclick="resetToUpload()">← New File</button>
+    </div>
+  </header>
+
+  <div class="viewer-body">
+
+    <!-- 3D Canvas -->
+    <div class="canvas-panel" id="canvasPanel">
+      <canvas id="threeCanvas"></canvas>
+
+      <!-- Loading overlay -->
+      <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+        <div class="loading-text" id="loadingText">Parsing VTP…</div>
+      </div>
+
+      <!-- Field toggle -->
+      <div class="field-toggle" id="fieldToggle">
+        <button class="field-btn pred active" onclick="switchField('Cp_pred')">Cp Pred</button>
+        <button class="field-btn gt"          onclick="switchField('Cp_true')">Cp True</button>
+        <button class="field-btn err"         onclick="switchField('Cp_error')">Cp Error</button>
+        <button class="field-btn pred"        onclick="switchField('WSS_pred_mag')">WSS Pred</button>
+        <button class="field-btn gt"          onclick="switchField('WSS_true_mag')">WSS True</button>
+        <button class="field-btn err"         onclick="switchField('WSS_error_mag')">WSS Error</button>
+      </div>
+
+      <!-- Auto-rotate -->
+      <button class="rotate-btn" id="rotateBtn" onclick="toggleRotate()">↻ Auto-rotate</button>
+
+      <!-- Colorbar -->
+      <div class="colorbar">
+        <div class="cb-labels">
+          <span id="cbMax">—</span>
+          <span style="opacity:.3">·</span>
+          <span id="cbMid">—</span>
+          <span style="opacity:.3">·</span>
+        </div>
+        <div class="cb-bar" id="cbBar"></div>
+        <div class="cb-labels" style="justify-content:flex-end">
+          <span style="opacity:.3">·</span>
+          <span id="cbMin">—</span>
+        </div>
+        <div class="cb-title" id="cbTitle">Cp</div>
+      </div>
+    </div>
+
+    <!-- Metrics panel -->
+    <aside class="metrics-panel">
+
+      <!-- KPIs -->
+      <div class="kpi-section">
+        <div class="sec-header">Surface Field Accuracy</div>
+        <div class="kpi-row">
+          <div class="kpi-card cp">
+            <div class="kpi-lbl">Cp MAE</div>
+            <div class="kpi-val" id="kpiCpMAE">—</div>
+            <div class="kpi-sub">normalised units</div>
+          </div>
+          <div class="kpi-card wss">
+            <div class="kpi-lbl">WSS Mag MAE</div>
+            <div class="kpi-val" id="kpiWssMAE">—</div>
+            <div class="kpi-sub">normalised units</div>
+          </div>
+          <div class="kpi-card cp" style="margin-top:0">
+            <div class="kpi-lbl">Cp R²</div>
+            <div class="kpi-val" id="kpiCpR2">—</div>
+            <div class="kpi-sub">correlation²</div>
+          </div>
+          <div class="kpi-card wss" style="margin-top:0">
+            <div class="kpi-lbl">WSS Mag R²</div>
+            <div class="kpi-val" id="kpiWssR2">—</div>
+            <div class="kpi-sub">correlation²</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Per-field breakdown -->
+      <div class="field-section">
+        <div class="sec-header">Per-field Breakdown</div>
+        <div class="metric-grid">
+          <span class="mg-h">Field</span>
+          <span class="mg-h">MAE</span>
+          <span class="mg-h">Max|Err|</span>
+
+          <span class="mg-k" id="fk0">Cp</span>
+          <span class="mg-v" id="fv0">—</span>
+          <span class="mg-v" id="fm0">—</span>
+
+          <span class="mg-k" id="fk1">WSS Mag</span>
+          <span class="mg-v" id="fv1">—</span>
+          <span class="mg-v" id="fm1">—</span>
+
+          <span class="mg-k" id="fk2">WSS x</span>
+          <span class="mg-v" id="fv2">—</span>
+          <span class="mg-v" id="fm2">—</span>
+
+          <span class="mg-k" id="fk3">WSS y</span>
+          <span class="mg-v" id="fv3">—</span>
+          <span class="mg-v" id="fm3">—</span>
+
+          <span class="mg-k" id="fk4">WSS z</span>
+          <span class="mg-v" id="fv4">—</span>
+          <span class="mg-v" id="fm4">—</span>
+        </div>
+      </div>
+
+      <!-- Cd comparison -->
+      <div class="cd-section">
+        <div class="sec-header">Drag Coefficient (Cd)</div>
+        <div class="cd-inputs">
+          <div class="cd-field">
+            <label>Predicted (from CLI)</label>
+            <input type="number" id="cdPred" step="0.001" placeholder="e.g. 0.312" oninput="updateCd()">
+          </div>
+          <div class="cd-field">
+            <label>Ground Truth (CFD)</label>
+            <input type="number" id="cdTrue" step="0.001" placeholder="e.g. 0.308" oninput="updateCd()">
+          </div>
+        </div>
+        <div class="cd-result">
+          <div class="cd-stat">
+            <div class="lbl">Absolute Error</div>
+            <div class="val" id="cdAbsErr">—</div>
+          </div>
+          <div class="cd-stat">
+            <div class="lbl">Relative Error</div>
+            <div class="val" id="cdRelErr">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mesh stats -->
+      <div class="stats-section">
+        <div class="sec-header">Mesh &amp; Model</div>
+        <div class="stat-row"><span class="stat-k">Vertices</span><span class="stat-v" id="statVerts">—</span></div>
+        <div class="stat-row"><span class="stat-k">Triangles</span><span class="stat-v" id="statTris">—</span></div>
+        <div class="stat-row"><span class="stat-k">Fields loaded</span><span class="stat-v" id="statFields">—</span></div>
+        <div class="stat-row"><span class="stat-k">Cp range (pred)</span><span class="stat-v" id="statCpRange">—</span></div>
+        <div class="stat-row"><span class="stat-k">WSS mag range (pred)</span><span class="stat-v" id="statWssRange">—</span></div>
+        <div class="stat-row"><span class="stat-k">Architecture</span><span class="stat-v" style="color:var(--accent)">GEM-CNN</span></div>
+        <div class="stat-row"><span class="stat-k">Gauge equivariance</span><span class="stat-v" style="color:var(--accent)">SO(2) exact</span></div>
+      </div>
+
+    </aside>
+  </div><!-- .viewer-body -->
+
+  <footer>
+    <div class="footer-note">
+      <strong>Pre-computed inference</strong> · GEM-CNN prediction vs CFD ground truth · DrivAerNet++ test set
+    </div>
+    <div style="font-size:9.5px;color:var(--text-muted);font-family:var(--font-d);">Drag to orbit · Scroll to zoom · Right-click to pan</div>
+  </footer>
+</div><!-- #viewerScreen -->
+
+<script>
+'use strict';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────────────────────────────────────
+let vtpData       = null;   // parsed VTP result
+let threeRenderer = null;
+let threeScene    = null;
+let threeCamera   = null;
+let threeControls = null;
+let threeMesh     = null;
+let animId        = null;
+let autoRotate    = false;
+let currentField  = 'Cp_pred';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DROP / UPLOAD
+// ─────────────────────────────────────────────────────────────────────────────
+const dropArea = document.getElementById('dropArea');
+const fileInput = document.getElementById('fileInput');
+
+dropArea.addEventListener('dragover',  e => { e.preventDefault(); dropArea.classList.add('drag-over'); });
+dropArea.addEventListener('dragleave', e => { dropArea.classList.remove('drag-over'); });
+dropArea.addEventListener('drop', e => {
+  e.preventDefault();
+  dropArea.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+fileInput.addEventListener('change', e => {
+  if (e.target.files[0]) handleFile(e.target.files[0]);
+});
+
+function handleFile(file) {
+  document.getElementById('dropError').classList.remove('visible');
+  const reader = new FileReader();
+  reader.onload = async e => {
+    try {
+      showViewer();
+      setLoading('Parsing VTP file…');
+      vtpData = await parseVTP(e.target.result);
+      setLoading('Building 3D mesh…');
+      await new Promise(r => setTimeout(r, 20)); // allow UI update
+      buildRenderer();
+      populateMetrics();
+      hideLoading();
+    } catch (err) {
+      console.error('VTP parse error:', err);
+      document.getElementById('dropError').classList.add('visible');
+      resetToUpload();
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function showViewer()  { document.getElementById('uploadScreen').style.display = 'none';  document.getElementById('viewerScreen').style.display = 'flex'; }
+function resetToUpload() {
+  document.getElementById('uploadScreen').style.display = 'flex';
+  document.getElementById('viewerScreen').style.display = 'none';
+  if (animId) { cancelAnimationFrame(animId); animId = null; }
+  if (threeRenderer) { threeRenderer.dispose(); threeRenderer = null; }
+  vtpData = null; threeMesh = null;
+  fileInput.value = '';
+}
+function setLoading(msg) {
+  document.getElementById('loadingOverlay').classList.remove('hidden');
+  document.getElementById('loadingText').textContent = msg;
+}
+function hideLoading() { document.getElementById('loadingOverlay').classList.add('hidden'); }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VTP PARSER  (binary inline base64 + vtkZLibDataCompressor + UInt32 header)
+// ─────────────────────────────────────────────────────────────────────────────
+async function parseVTP(arrayBuffer) {
+  const text = new TextDecoder().decode(arrayBuffer);
+  const xmlDoc = new DOMParser().parseFromString(text, 'application/xml');
+
+  const vtkFile    = xmlDoc.querySelector('VTKFile');
+  const compressed = !!vtkFile.getAttribute('compressor');
+  const headerType = vtkFile.getAttribute('header_type') || 'UInt32';
+  const littleEnd  = vtkFile.getAttribute('byte_order') !== 'BigEndian';
+
+  const piece    = xmlDoc.querySelector('Piece');
+  const nPoints  = parseInt(piece.getAttribute('NumberOfPoints'));
+  const nPolys   = parseInt(piece.getAttribute('NumberOfPolys'));
+
+  // Decode one DataArray element → typed array
+  function decodeDA(el) {
+    if (!el) return null;
+    const format = el.getAttribute('format');
+    const dtype  = el.getAttribute('type');
+    const nComp  = parseInt(el.getAttribute('NumberOfComponents') || '1');
+
+    if (format === 'ascii') {
+      const vals = el.textContent.trim().split(/\s+/).map(Number);
+      return { nComp, bytes: null, typed: toTyped(new Float32Array(vals), dtype) };
+    }
+
+    if (format === 'binary') {
+      const raw = el.textContent.replace(/\s/g, '');
+
+      // ── Peek at first 6 bytes (8 b64 chars, no padding needed) to read num_blocks ──
+      const peek6 = b64toBytes(raw.substring(0, 8));
+      const numBlocks = readUint32(peek6, 0, littleEnd);
+
+      // header size = (3 + numBlocks) * headerWordBytes
+      const wordBytes    = headerType === 'UInt64' ? 8 : 4;
+      const headerByteLen = (3 + numBlocks) * wordBytes;
+      const headerB64Len  = Math.ceil(headerByteLen / 3) * 4;
+
+      const headerBytes = b64toBytes(raw.substring(0, headerB64Len));
+      const dataBytes   = b64toBytes(raw.substring(headerB64Len));
+
+      if (!compressed) {
+        return { nComp, typed: interpretAs(dataBytes, dtype) };
+      }
+
+      // Compressed: read compressed sizes from header
+      // header: [numBlocks, maxBlockSize, lastPartialSize, compSize_0, ..., compSize_N-1]
+      const compSizes = [];
+      for (let i = 0; i < numBlocks; i++) {
+        compSizes.push(readUint32(headerBytes, (3 + i) * wordBytes, littleEnd));
+      }
+
+      // Decompress blocks
+      const chunks = [];
+      let offset = 0;
+      for (let i = 0; i < numBlocks; i++) {
+        chunks.push(pako.inflate(dataBytes.subarray(offset, offset + compSizes[i])));
+        offset += compSizes[i];
+      }
+
+      // Concatenate
+      const total = chunks.reduce((s, c) => s + c.byteLength, 0);
+      const merged = new Uint8Array(total);
+      let pos = 0;
+      for (const c of chunks) { merged.set(c, pos); pos += c.byteLength; }
+
+      return { nComp, typed: interpretAs(merged, dtype) };
+    }
+    return null;
+  }
+
+  // ── Parse sections ──
+  const pointsEl  = xmlDoc.querySelector('Points DataArray');
+  const connEl    = xmlDoc.querySelector('Polys DataArray[Name="connectivity"]');
+
+  const pointsParsed = decodeDA(pointsEl);
+  const connParsed   = decodeDA(connEl);
+
+  // Int64 connectivity → Uint32 (high 32 bits are 0 for meshes with < 4B vertices)
+  let indices = null;
+  if (connParsed) {
+    const bytes = connParsed.typed instanceof Uint8Array
+      ? connParsed.typed
+      : new Uint8Array(connParsed.typed.buffer);
+    const nIdx = bytes.byteLength / 8;
+    indices = new Uint32Array(nIdx);
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    for (let i = 0; i < nIdx; i++) indices[i] = dv.getUint32(i * 8, true);
+  }
+
+  // ── PointData fields ──
+  const fields = {};
+  xmlDoc.querySelectorAll('PointData DataArray').forEach(da => {
+    const name = da.getAttribute('Name');
+    const parsed = decodeDA(da);
+    if (parsed) fields[name] = parsed;
+  });
+
+  // Compute WSS error magnitude if both WSS_pred_mag and WSS_true_mag exist
+  if (fields['WSS_pred_mag'] && fields['WSS_true_mag']) {
+    const pm = fields['WSS_pred_mag'].typed;
+    const tm = fields['WSS_true_mag'].typed;
+    const err = new Float32Array(pm.length);
+    for (let i = 0; i < pm.length; i++) err[i] = Math.abs(pm[i] - tm[i]);
+    fields['WSS_error_mag'] = { nComp: 1, typed: err };
+  }
+
+  return {
+    nPoints, nPolys,
+    vertices: pointsParsed?.typed,
+    indices,
+    fields,
+  };
+}
+
+// ── Helpers ──
+function b64toBytes(b64) {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function readUint32(bytes, byteOffset, littleEndian) {
+  const dv = new DataView(bytes.buffer, bytes.byteOffset + byteOffset, 4);
+  return dv.getUint32(0, littleEndian);
+}
+
+function interpretAs(bytes, dtype) {
+  const buf = bytes.buffer;
+  const off = bytes.byteOffset;
+  const len = bytes.byteLength;
+  switch (dtype) {
+    case 'Float32': return new Float32Array(buf, off, len / 4);
+    case 'Float64': return new Float64Array(buf, off, len / 8);
+    case 'Int32':   return new Int32Array(buf,   off, len / 4);
+    case 'UInt32':  return new Uint32Array(buf,  off, len / 4);
+    case 'Int64':   return bytes; // caller handles
+    default:        return bytes;
+  }
+}
+
+function toTyped(arr, dtype) {
+  if (dtype === 'Float32') return new Float32Array(arr);
+  return arr;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COLORMAPS
+// ─────────────────────────────────────────────────────────────────────────────
+function colormapDiverging(t) {
+  // Blue (min) → white (0.5) → red (max)
+  if (t <= 0.5) { const s = t * 2; return [s, s, 1.0]; }
+  const s = (t - 0.5) * 2;
+  return [1.0, 1 - s, 1 - s];
+}
+function colormapPlasma(t) {
+  // Dark purple → blue → cyan → yellow (viridis-ish)
+  const r = Math.min(1, Math.max(0, 0.05 + t * 1.4 + t * t * 0.5));
+  const g = Math.min(1, Math.max(0, 0.03 + t * 0.8 + t * t * 0.6 - t * t * t * 0.4));
+  const b = Math.min(1, Math.max(0, 0.55 + t * 0.6 - t * t * 1.8 + t * t * t * 1.0));
+  return [r, g, b];
+}
+function colormapHot(t) {
+  // Black → red → yellow → white
+  if (t < 1/3) return [t * 3, 0, 0];
+  if (t < 2/3) return [1, (t - 1/3) * 3, 0];
+  return [1, 1, (t - 2/3) * 3];
+}
+
+const FIELD_CONFIG = {
+  Cp_pred:      { label: 'Cp Pred',       colormap: colormapDiverging, cbTitle: 'Cp (pred)'     },
+  Cp_true:      { label: 'Cp True',       colormap: colormapDiverging, cbTitle: 'Cp (CFD)'      },
+  Cp_error:     { label: 'Cp |Error|',    colormap: colormapHot,       cbTitle: '|ΔCp|'         },
+  WSS_pred_mag: { label: 'WSS Mag Pred',  colormap: colormapPlasma,    cbTitle: 'WSS (pred)'    },
+  WSS_true_mag: { label: 'WSS Mag True',  colormap: colormapPlasma,    cbTitle: 'WSS (CFD)'     },
+  WSS_error_mag:{ label: 'WSS Mag |Err|', colormap: colormapHot,       cbTitle: '|ΔWSS|'        },
+};
+
+const CB_GRADIENTS = {
+  diverging: 'linear-gradient(to bottom, rgb(255,20,20), rgb(255,255,255) 50%, rgb(0,32,255))',
+  plasma:    'linear-gradient(to bottom, rgb(255,240,50), rgb(255,80,0) 34%, rgb(60,0,180) 67%, rgb(5,5,30))',
+  hot:       'linear-gradient(to bottom, rgb(255,255,255), rgb(255,200,0) 40%, rgb(255,0,0) 70%, rgb(0,0,0))',
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// THREE.JS RENDERER
+// ─────────────────────────────────────────────────────────────────────────────
+function buildRenderer() {
+  const panel  = document.getElementById('canvasPanel');
+  const canvas = document.getElementById('threeCanvas');
+  const W = panel.clientWidth, H = panel.clientHeight;
+
+  threeRenderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  threeRenderer.setPixelRatio(window.devicePixelRatio);
+  threeRenderer.setSize(W, H);
+  threeRenderer.setClearColor(0x040810, 1);
+
+  threeScene  = new THREE.Scene();
+  threeCamera = new THREE.PerspectiveCamera(45, W / H, 0.01, 1000);
+
+  // Lights
+  threeScene.add(new THREE.AmbientLight(0xffffff, 0.45));
+  const d1 = new THREE.DirectionalLight(0xffffff, 0.8); d1.position.set(5, 8, 5);   threeScene.add(d1);
+  const d2 = new THREE.DirectionalLight(0x88ccff, 0.4); d2.position.set(-5, 3, -4); threeScene.add(d2);
+
+  // Build geometry
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtpData.vertices), 3));
+  geo.setIndex(new THREE.BufferAttribute(vtpData.indices, 1));
+  const colors = new Float32Array(vtpData.nPoints * 3).fill(0.5);
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geo.computeVertexNormals();
+
+  const mat = new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 50, specular: 0x222222 });
+  threeMesh = new THREE.Mesh(geo, mat);
+  threeScene.add(threeMesh);
+
+  // Fit camera
+  geo.computeBoundingSphere();
+  const bs = geo.boundingSphere;
+  threeCamera.position.set(bs.center.x + bs.radius * 1.8, bs.center.y + bs.radius * 0.6, bs.center.z + bs.radius * 2.2);
+  threeCamera.lookAt(bs.center);
+
+  threeControls = new THREE.OrbitControls(threeCamera, canvas);
+  threeControls.target.copy(bs.center);
+  threeControls.enableDamping = true;
+  threeControls.dampingFactor = 0.08;
+  threeControls.update();
+
+  // Apply initial field
+  switchField('Cp_pred');
+
+  // Animate loop
+  function animate() {
+    animId = requestAnimationFrame(animate);
+    if (autoRotate) threeMesh.rotation.y += 0.003;
+    threeControls.update();
+    threeRenderer.render(threeScene, threeCamera);
+  }
+  animate();
+
+  // Resize handler
+  const ro = new ResizeObserver(() => {
+    const w = panel.clientWidth, h = panel.clientHeight;
+    threeRenderer.setSize(w, h);
+    threeCamera.aspect = w / h;
+    threeCamera.updateProjectionMatrix();
+  });
+  ro.observe(panel);
+}
+
+function switchField(fieldName) {
+  if (!vtpData || !threeScene) return;
+  const fieldInfo = vtpData.fields[fieldName];
+  if (!fieldInfo) { console.warn('Field not found:', fieldName); return; }
+
+  currentField = fieldName;
+  const cfg    = FIELD_CONFIG[fieldName] || FIELD_CONFIG['Cp_pred'];
+  const data   = fieldInfo.typed;
+
+  // Compute min/max
+  let fmin = Infinity, fmax = -Infinity;
+  for (let i = 0; i < data.length; i++) {
+    if (data[i] < fmin) fmin = data[i];
+    if (data[i] > fmax) fmax = data[i];
+  }
+  const range = fmax - fmin || 1;
+
+  // Update vertex colors
+  const colors = threeMesh.geometry.attributes.color;
+  for (let i = 0; i < data.length; i++) {
+    const t = (data[i] - fmin) / range;
+    const [r, g, b] = cfg.colormap(t);
+    colors.setXYZ(i, r, g, b);
+  }
+  colors.needsUpdate = true;
+
+  // Update colorbar
+  document.getElementById('cbTitle').textContent = cfg.cbTitle;
+  document.getElementById('cbMax').textContent   = fmax.toFixed(3);
+  document.getElementById('cbMid').textContent   = ((fmin + fmax) / 2).toFixed(3);
+  document.getElementById('cbMin').textContent   = fmin.toFixed(3);
+
+  const cbGradKey = cfg.colormap === colormapDiverging ? 'diverging'
+                  : cfg.colormap === colormapPlasma    ? 'plasma' : 'hot';
+  document.getElementById('cbBar').style.background = CB_GRADIENTS[cbGradKey];
+
+  // Highlight active button
+  document.querySelectorAll('.field-btn').forEach(b => {
+    b.classList.toggle('active', b.getAttribute('onclick').includes(`'${fieldName}'`));
+  });
+}
+
+function toggleRotate() {
+  autoRotate = !autoRotate;
+  const btn = document.getElementById('rotateBtn');
+  btn.classList.toggle('on', autoRotate);
+  btn.textContent = autoRotate ? '↻ Rotating' : '↻ Auto-rotate';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// METRICS
+// ─────────────────────────────────────────────────────────────────────────────
+function populateMetrics() {
+  const d = vtpData;
+
+  // Mesh info
+  document.getElementById('meshInfoLine').textContent =
+    `${d.nPoints.toLocaleString()} vertices · ${d.nPolys.toLocaleString()} triangles · ${Object.keys(d.fields).length} fields`;
+  document.getElementById('meshInfoChip').textContent =
+    `${d.nPoints.toLocaleString()} pts`;
+  document.getElementById('statVerts').textContent   = d.nPoints.toLocaleString();
+  document.getElementById('statTris').textContent    = d.nPolys.toLocaleString();
+  document.getElementById('statFields').textContent  = Object.keys(d.fields).join(', ');
+
+  function mae(pred, true_) {
+    let s = 0; for (let i = 0; i < pred.length; i++) s += Math.abs(pred[i] - true_[i]);
+    return s / pred.length;
+  }
+  function r2(pred, true_) {
+    let mean = 0; for (let i = 0; i < true_.length; i++) mean += true_[i]; mean /= true_.length;
+    let ss_tot = 0, ss_res = 0;
+    for (let i = 0; i < pred.length; i++) {
+      ss_tot += (true_[i] - mean) ** 2;
+      ss_res += (true_[i] - pred[i]) ** 2;
+    }
+    return 1 - ss_res / (ss_tot || 1);
+  }
+  function maxErr(pred, true_) {
+    let m = 0; for (let i = 0; i < pred.length; i++) { const e = Math.abs(pred[i] - true_[i]); if (e > m) m = e; }
+    return m;
+  }
+
+  // Cp metrics
+  if (d.fields['Cp_pred'] && d.fields['Cp_true']) {
+    const cp  = d.fields['Cp_pred'].typed;
+    const ct  = d.fields['Cp_true'].typed;
+    const cpMAE = mae(cp, ct);
+    const cpR2  = r2(cp, ct);
+    const cpMax = maxErr(cp, ct);
+    document.getElementById('kpiCpMAE').textContent = cpMAE.toFixed(4);
+    document.getElementById('kpiCpR2').textContent  = cpR2.toFixed(3);
+    document.getElementById('fv0').textContent = cpMAE.toFixed(4);
+    document.getElementById('fm0').textContent = cpMax.toFixed(4);
+    colourMetric('fv0', cpMAE, 0.08, 0.15);
+    colourMetric('fm0', cpMax, 0.3, 0.6);
+
+    const [cmin, cmax] = fieldRange(cp);
+    document.getElementById('statCpRange').textContent = `${cmin.toFixed(3)} → ${cmax.toFixed(3)}`;
+  }
+
+  // WSS magnitude metrics
+  if (d.fields['WSS_pred_mag'] && d.fields['WSS_true_mag']) {
+    const wp  = d.fields['WSS_pred_mag'].typed;
+    const wt  = d.fields['WSS_true_mag'].typed;
+    const wMAE = mae(wp, wt);
+    const wR2  = r2(wp, wt);
+    const wMax = maxErr(wp, wt);
+    document.getElementById('kpiWssMAE').textContent = wMAE.toFixed(4);
+    document.getElementById('kpiWssR2').textContent  = wR2.toFixed(3);
+    document.getElementById('fv1').textContent = wMAE.toFixed(4);
+    document.getElementById('fm1').textContent = wMax.toFixed(4);
+    colourMetric('fv1', wMAE, 0.12, 0.25);
+    colourMetric('fm1', wMax, 0.5, 1.0);
+
+    const [wmin, wmax] = fieldRange(wp);
+    document.getElementById('statWssRange').textContent = `${wmin.toFixed(3)} → ${wmax.toFixed(3)}`;
+  }
+
+  // Per-component WSS
+  ['WSS_pred', 'WSS_true'].every(k => d.fields[k]);
+  if (d.fields['WSS_pred'] && d.fields['WSS_true']) {
+    const wp3 = d.fields['WSS_pred'].typed;
+    const wt3 = d.fields['WSS_true'].typed;
+    const N = wp3.length / 3;
+    for (let comp = 0; comp < 3; comp++) {
+      const axis = ['x', 'y', 'z'][comp];
+      const pred = new Float32Array(N), true_ = new Float32Array(N);
+      for (let i = 0; i < N; i++) { pred[i] = wp3[i * 3 + comp]; true_[i] = wt3[i * 3 + comp]; }
+      const m = mae(pred, true_);
+      const mx = maxErr(pred, true_);
+      document.getElementById(`fv${comp + 2}`).textContent = m.toFixed(4);
+      document.getElementById(`fm${comp + 2}`).textContent = mx.toFixed(4);
+    }
+  }
+}
+
+function fieldRange(arr) {
+  let mn = Infinity, mx = -Infinity;
+  for (let i = 0; i < arr.length; i++) { if (arr[i] < mn) mn = arr[i]; if (arr[i] > mx) mx = arr[i]; }
+  return [mn, mx];
+}
+
+function colourMetric(id, val, warnThresh, badThresh) {
+  const el = document.getElementById(id);
+  el.className = 'mg-v' + (val > badThresh ? ' bad' : val > warnThresh ? ' warn' : ' good');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CD INPUT
+// ─────────────────────────────────────────────────────────────────────────────
+function updateCd() {
+  const pred = parseFloat(document.getElementById('cdPred').value);
+  const true_ = parseFloat(document.getElementById('cdTrue').value);
+  if (isNaN(pred) || isNaN(true_)) {
+    document.getElementById('cdAbsErr').textContent = '—';
+    document.getElementById('cdAbsErr').className   = 'val';
+    document.getElementById('cdRelErr').textContent = '—';
+    document.getElementById('cdRelErr').className   = 'val';
+    return;
+  }
+  const absErr = Math.abs(pred - true_);
+  const relErr = absErr / Math.abs(true_) * 100;
+  const cls = relErr < 5 ? 'val good' : relErr < 10 ? 'val' : 'val bad';
+  document.getElementById('cdAbsErr').textContent = absErr.toFixed(4);
+  document.getElementById('cdAbsErr').className   = cls;
+  document.getElementById('cdRelErr').textContent = relErr.toFixed(2) + '%';
+  document.getElementById('cdRelErr').className   = cls;
+}
+</script>
+</body>
+</html>
