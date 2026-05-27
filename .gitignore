@@ -55,4 +55,4 @@ viz/
 !phase_2_train/*.pt
 
 !runs/
-!runs/*.pt
+!runs/**/*.pt
