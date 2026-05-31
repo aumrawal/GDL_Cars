@@ -61,6 +61,10 @@ def _get_device() -> torch.device:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def load_model(checkpoint_path: str, device: torch.device) -> F1AeroNet:
+    if os.path.isdir(checkpoint_path):
+        checkpoint_path = os.path.join(checkpoint_path, "best.pt")
+        if not os.path.exists(checkpoint_path):
+            raise SystemExit(f"[ERROR] No best.pt found in directory: {checkpoint_path}")
     ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
 
     # Try to recover model config from checkpoint; fall back to known best-run spec
@@ -273,7 +277,7 @@ def _metrics_card(metrics: dict, design_id: str, elapsed_ms: float, out_path: st
         ["WSS mag",
             f"{metrics['wss_rmse']:.4f}",
             f"{metrics['wss_mae']:.4f}",
-            "—"],
+            f"R² = {metrics['wss_r2']:.4f}"],
         ["Cd",
             "—",
             f"{metrics['cd_mae_phys']:.5f}",
@@ -321,8 +325,47 @@ def _metrics_card(metrics: dict, design_id: str, elapsed_ms: float, out_path: st
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# VTP placeholder
+# VTP export + placeholder
 # ─────────────────────────────────────────────────────────────────────────────
+
+def _export_vtp(
+    vertices:     np.ndarray,   # (V, 3)
+    faces:        np.ndarray,   # (F, 3)
+    cp_pred:      np.ndarray,
+    cp_true:      np.ndarray,
+    wss_pred:     np.ndarray,   # (V, 3)
+    wss_true:     np.ndarray,
+    design_id:    str,
+    out_dir:      str,
+):
+    try:
+        import pyvista as pv
+    except ImportError:
+        print("  [VTP]  pyvista not installed — skipping export (pip install pyvista vtk)")
+        return
+
+    wss_pred_mag = np.linalg.norm(wss_pred, axis=1) if wss_pred.ndim == 2 else np.abs(wss_pred)
+    wss_true_mag = np.linalg.norm(wss_true, axis=1) if wss_true.ndim == 2 else np.abs(wss_true)
+
+    n_faces  = faces.shape[0]
+    pv_faces = np.hstack([np.full((n_faces, 1), 3, dtype=np.int64),
+                          faces.astype(np.int64)]).flatten()
+    mesh = pv.PolyData(vertices.astype(np.float64), pv_faces)
+
+    mesh.point_data["Cp_pred"]       = cp_pred
+    mesh.point_data["Cp_true"]       = cp_true
+    mesh.point_data["Cp_error"]      = np.abs(cp_pred - cp_true)
+    mesh.point_data["WSS_mag_pred"]  = wss_pred_mag
+    mesh.point_data["WSS_mag_true"]  = wss_true_mag
+    mesh.point_data["WSS_mag_error"] = np.abs(wss_pred_mag - wss_true_mag)
+    if wss_pred.ndim == 2:
+        mesh.point_data["WSS_pred_vec"] = wss_pred
+        mesh.point_data["WSS_true_vec"] = wss_true
+
+    out_path = os.path.join(out_dir, f"{design_id}_predictions.vtp")
+    mesh.save(out_path)
+    print(f"  [VTP]  {out_path}")
+
 
 def _write_vtp_placeholder(design_id: str, out_dir: str):
     path = os.path.join(out_dir, "predictions_READY.txt")
@@ -330,8 +373,7 @@ def _write_vtp_placeholder(design_id: str, out_dir: str):
         "F1AeroNet — Prediction VTP Placeholder\n"
         "=======================================\n\n"
         f"Design:  {design_id}\n\n"
-        "This file marks where the full ParaView VTP will be generated.\n"
-        "Run with --export-vtp to produce the actual mesh file, which contains:\n\n"
+        "Run with --export-vtp to produce the actual ParaView file, which contains:\n\n"
         "  • Cp_pred       — predicted surface pressure coefficient\n"
         "  • Cp_true       — CFD ground truth Cp\n"
         "  • Cp_error      — absolute error |Cp_pred - Cp_true|\n"
@@ -349,14 +391,41 @@ def _write_vtp_placeholder(design_id: str, out_dir: str):
 # Load a single sample from a user-supplied VTP file
 # ─────────────────────────────────────────────────────────────────────────────
 
-def load_sample_from_vtp(vtp_path: str) -> object:
-    """Parse a DrivAerNet++ VTP file and return a PyG Data object."""
-    print(f"  Loading VTP:  {vtp_path}")
-    raw = load_merged_vtp(vtp_path)
-    design_id = os.path.splitext(os.path.basename(vtp_path))[0]
-    data = mesh_to_pyg_data(raw, design_id=design_id)
-    print(f"  Vertices: {data.num_nodes:,}   Edges: {data.edge_index.shape[1]:,}")
-    return data
+def load_sample_from_file(path: str) -> object:
+    """
+    Load a single sample from either:
+      - a processed .pt file  (data/drivaernet_real/processed/val/F_S_WWS_WM_504.pt)
+      - a raw .vtp mesh file  (data/drivaernet_real/meshes/F_S_WWS_WM_504.vtp)
+    """
+    if not os.path.exists(path):
+        raise SystemExit(f"[ERROR] File not found: {path}")
+
+    ext = os.path.splitext(path)[1].lower()
+
+    if ext == ".pt":
+        print(f"  Loading processed cache:  {path}")
+        data = torch.load(path, map_location="cpu", weights_only=False)
+        n_features = data.x.shape[1] if hasattr(data, "x") and data.x is not None else 0
+        if n_features != 9:
+            raise SystemExit(
+                f"[ERROR] Stale cache: expected 9 input features, got {n_features}.\n"
+                f"        Delete the old file and re-run to regenerate:\n"
+                f"          rm {path}"
+            )
+        print(f"  Vertices: {data.num_nodes:,}   Edges: {data.edge_index.shape[1]:,}")
+        return data
+
+    if ext == ".vtp":
+        print(f"  Loading raw VTP:  {path}")
+        raw = load_merged_vtp(path)
+        design_id = os.path.splitext(os.path.basename(path))[0]
+        data = mesh_to_pyg_data(raw, design_id=design_id)
+        print(f"  Vertices: {data.num_nodes:,}   Edges: {data.edge_index.shape[1]:,}")
+        return data
+
+    raise SystemExit(
+        f"[ERROR] --vtp accepts .pt (processed cache) or .vtp (raw mesh), got: {path}"
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -365,7 +434,7 @@ def load_sample_from_vtp(vtp_path: str) -> object:
 
 def main():
     parser = argparse.ArgumentParser(description="F1AeroNet live client demo")
-    parser.add_argument("--checkpoint", default="new_final_run/best.pt",
+    parser.add_argument("--checkpoint", default="runs/output_293/best.pt",
                         help="Path to trained .pt checkpoint")
     parser.add_argument("--vtp",        default=None,
                         help="Path to a VTP file to run inference on directly "
@@ -376,6 +445,8 @@ def main():
                         help="Path to cd_stats.json (auto-detected if omitted)")
     parser.add_argument("--out",        default="outputs/client_demo",
                         help="Output directory")
+    parser.add_argument("--export-vtp", action="store_true",
+                        help="Write a ParaView .vtp file with all prediction fields")
     args = parser.parse_args()
 
     os.makedirs(args.out, exist_ok=True)
@@ -418,7 +489,7 @@ def main():
     # ── Load sample ──────────────────────────────────────────────────────────
     if args.vtp:
         print("\n[2/5]  Loading VTP file …")
-        best_data = load_sample_from_vtp(args.vtp)
+        best_data = load_sample_from_file(args.vtp)
         design_id = getattr(best_data, "design_id", "unknown")
         print(f"\n[3/5]  (Skipped — VTP provided directly)")
     else:
@@ -471,6 +542,7 @@ def main():
         "cp_r2":      _r2(cp_pred,   cp_true),
         "wss_rmse":   _rmse(wss_pred_mag, wss_true_mag),
         "wss_mae":    _mae(wss_pred_mag,  wss_true_mag),
+        "wss_r2":     _r2(wss_pred_mag,   wss_true_mag),
         "cd_pred":    cd_pred_phys,
         "cd_true":    cd_true_phys,
         "cd_mae_phys": cd_mae_phys,
@@ -480,7 +552,8 @@ def main():
     print(f"\n  Metrics  (normalised space unless noted)")
     print(f"    Cp   RMSE={metrics['cp_rmse']:.4f}  MAE={metrics['cp_mae']:.4f}  "
           f"R²={metrics['cp_r2']:.4f}")
-    print(f"    WSS  RMSE={metrics['wss_rmse']:.4f}  MAE={metrics['wss_mae']:.4f}")
+    print(f"    WSS  RMSE={metrics['wss_rmse']:.4f}  MAE={metrics['wss_mae']:.4f}  "
+          f"R²={metrics['wss_r2']:.4f}")
     print(f"    Cd   pred={cd_pred_phys:.4f}  true={cd_true_phys:.4f}  "
           f"err={cd_mae_phys:.5f}  ({cd_rel_pct:.2f} %)")
 
@@ -515,7 +588,20 @@ def main():
         out_path   = os.path.join(args.out, "metrics_card.png"),
     )
 
-    _write_vtp_placeholder(design_id, args.out)
+    if args.export_vtp:
+        faces = best_data.face.T.cpu().numpy()
+        _export_vtp(
+            vertices  = verts,
+            faces     = faces,
+            cp_pred   = cp_pred,
+            cp_true   = cp_true,
+            wss_pred  = wss_pred,
+            wss_true  = wss_true,
+            design_id = design_id,
+            out_dir   = args.out,
+        )
+    else:
+        _write_vtp_placeholder(design_id, args.out)
 
     print(f"\n{'='*60}")
     print(f"  Done.  All outputs in:  {os.path.abspath(args.out)}/")

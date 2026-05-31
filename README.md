@@ -96,14 +96,16 @@ F1AeroNet       →   anisotropic kernel →   direction-aware, gauge-equivarian
 
 ### Quantitative Results
 
+> Metrics computed on the 45-sample test split using [`F1_Verify_Metrics.ipynb`](F1_Verify_Metrics.ipynb).
+
 | Metric | Value |
 |--------|-------|
-| Cp MAE |0.12142|
-| Cp RMSE|0.63755|
-| Cp R²  |0.0846 |
-| WSS MAE|0.14923|
-|WSS RSME|0.79070|
-|WSS AngErr|17.12°|
+| Cp MAE | 0.15602 |
+| Cp RMSE | 0.59225 |
+| Cp R² | 0.21004 |
+| WSS MAE | 0.16359 |
+| WSS RMSE | 0.75249 |
+| WSS AngErr | 22.50° |
 | Cd MAE | 0.01719 |
 | Cd Relative Error | 6.87 % |
 | Training Meshes | 200 |
