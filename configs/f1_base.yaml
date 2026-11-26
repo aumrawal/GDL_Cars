@@ -1,7 +1,7 @@
 # configs/f1_base.yaml
 
 data:
-  data_root: "/kaggle/working/drivaernet_real"
+  data_root: "data/drivaernet_real"   # on Kaggle: /kaggle/working/drivaernet_real
   max_vertices: 50000
   rho: 1.225
   U_inf: 83.33
@@ -30,7 +30,7 @@ training:
   T_mult: 2
   min_lr: 1.0e-6
   grad_clip: 1.0
-  checkpoint_dir: "/kaggle/working/GDL_Cars/runs/"
+  checkpoint_dir: "runs/"
   log_every: 10
   loss_weights:
     cp:  1.0
@@ -44,6 +44,6 @@ training:
     cl:  "l1"
 
 eval:
-  checkpoint: "/kaggle/working/GDL_Cars/runs/best.pt"
-  output_dir: "/kaggle/working/GDL_Cars"
+  checkpoint: "runs/best.pt"
+  output_dir: "outputs/"
   save_vtk: true

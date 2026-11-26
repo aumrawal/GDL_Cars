@@ -22,13 +22,14 @@ import numpy as np
 import pyvista as pv
 
 # ── CONFIG — edit these paths ────────────────────────────────────────────────
-MESH_ZIP   = "/Volumes/DriverNet/Mesh_zip/F_S_WWS_WM.zip"
-PRESS_ZIP  = "/Volumes/DriverNet/Pressure_zip/F_S_WWS_WM.zip"
-WSS_ZIP    = "/Volumes/DriverNet/WSS_zip/F_S_WWS_WM.zip"
-COEFF_CSV  = "/Volumes/DriverNet/drag_coefficients.csv"
-
-OUTPUT_DIR = os.path.expanduser("~/Desktop/f1_aero_gem/data/drivaernet_real")
-
+# Set DRIVAERNET_ROOT to the folder holding the DrivAerNet++ downloads, e.g.
+#   DRIVAERNET_ROOT=/Volumes/DriverNet python prepare_data.py
+DRIVAERNET_ROOT = os.environ.get("DRIVAERNET_ROOT", "/path/to/DrivAerNet++")
+MESH_ZIP   = os.path.join(DRIVAERNET_ROOT, "Mesh_zip", "F_S_WWS_WM.zip")
+PRESS_ZIP  = os.path.join(DRIVAERNET_ROOT, "Pressure_zip", "F_S_WWS_WM.zip")
+WSS_ZIP    = os.path.join(DRIVAERNET_ROOT, "WSS_zip", "F_S_WWS_WM.zip")
+COEFF_CSV  = os.path.join(DRIVAERNET_ROOT, "drag_coefficients.csv")
+OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "drivaernet_real")
 N_DESIGNS  = 300      # how many designs to extract (out of ~684)
 MAX_VERTS  = 50000    # subsample meshes to this size (None = keep all)
 TRAIN_FRAC = 0.70
